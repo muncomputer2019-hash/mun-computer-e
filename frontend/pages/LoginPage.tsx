@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
@@ -13,7 +13,11 @@ import {
 import { BrandLogo } from '../components/BrandLogo';
 import { Button } from '../components/Button';
 import { BRAND } from '../assets/brand';
-import { securityRequest, setCsrfToken } from '../services/securityApi';
+import {
+  isExpressBackendOffline,
+  securityRequest,
+  setCsrfToken,
+} from '../services/securityApi';
 import {
   firebaseInitError,
   isFirebaseConfigured,
@@ -28,6 +32,64 @@ type AuthStep =
   | 'reset-password';
 
 const IS_DEV_MODE = !import.meta.env.PROD;
+const CAPTCHA_CHARSET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+function randomCaptchaInt(maxExclusive: number): number {
+  if (typeof window !== 'undefined' && window.crypto?.getRandomValues) {
+    const buf = new Uint32Array(1);
+    window.crypto.getRandomValues(buf);
+    return buf[0] % maxExclusive;
+  }
+  return Math.floor(Math.random() * maxExclusive);
+}
+
+function generateClientCaptcha(): {
+  id: string;
+  code: string;
+  svg: string;
+} {
+  let code = '';
+  for (let i = 0; i < 5; i += 1) {
+    code += CAPTCHA_CHARSET[randomCaptchaInt(CAPTCHA_CHARSET.length)];
+  }
+  const id = `client-${Date.now().toString(36)}-${randomCaptchaInt(100000).toString(36)}`;
+  const palette = ['#0a0a0a', '#1e3a8a', '#171717', '#0f172a'];
+
+  const letters = code
+    .split('')
+    .map((ch, idx) => {
+      const x = 18 + idx * 24;
+      const y = 25 + randomCaptchaInt(6) - 1;
+      const rot = randomCaptchaInt(21) - 10;
+      const color = palette[randomCaptchaInt(palette.length)];
+      return `<text x="${x}" y="${y}" transform="rotate(${rot} ${x} ${y})" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="20" font-weight="700" fill="${color}">${ch}</text>`;
+    })
+    .join('');
+
+  const line1Y1 = 8 + randomCaptchaInt(24);
+  const line1Y2 = 8 + randomCaptchaInt(24);
+  const line2Y1 = 8 + randomCaptchaInt(24);
+  const line2Y2 = 8 + randomCaptchaInt(24);
+  const line3Y1 = 10 + randomCaptchaInt(20);
+  const line3Y2 = 10 + randomCaptchaInt(20);
+
+  const dots = Array.from({ length: 8 }, () => {
+    const cx = 8 + randomCaptchaInt(128);
+    const cy = 6 + randomCaptchaInt(28);
+    return `<circle cx="${cx}" cy="${cy}" r="1" fill="#94a3b8" opacity="0.55"/>`;
+  }).join('');
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="144" height="40" viewBox="0 0 144 40" role="img" aria-label="Security verification code">
+    <rect width="144" height="40" rx="4" fill="#fafafa" stroke="#e5e5e5"/>
+    <line x1="6" y1="${line1Y1}" x2="138" y2="${line1Y2}" stroke="#cbd5e1" stroke-width="1.1"/>
+    <line x1="8" y1="${line2Y1}" x2="136" y2="${line2Y2}" stroke="#d4d4d8" stroke-width="1"/>
+    <line x1="12" y1="${line3Y1}" x2="132" y2="${line3Y2}" stroke="#93c5fd" stroke-width="0.9" opacity="0.65"/>
+    ${dots}
+    ${letters}
+  </svg>`;
+
+  return { id, code, svg };
+}
 
 interface LoginPageProps {
   onLoginSuccess: (
@@ -54,9 +116,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  // CAPTCHA State
-  const [captchaId, setCaptchaId] = useState('');
-  const [captchaSvg, setCaptchaSvg] = useState('');
+  // CAPTCHA State (initialized synchronously so the CAPTCHA box is never blank on load)
+  const [initialCaptcha] = useState(() => generateClientCaptcha());
+  const [captchaId, setCaptchaId] = useState(initialCaptcha.id);
+  const [captchaSvg, setCaptchaSvg] = useState(initialCaptcha.svg);
+  const [clientCaptchaCode, setClientCaptchaCode] = useState(initialCaptcha.code);
+  const [captchaSource, setCaptchaSource] = useState<'server' | 'client'>('client');
   const [captchaAnswer, setCaptchaAnswer] = useState('');
 
   // OTP Verification State
@@ -79,32 +144,67 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   const [loading, setLoading] = useState(false);
   const [firebaseLoading, setFirebaseLoading] = useState(false);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
-  const [expressOnline, setExpressOnline] = useState<boolean | null>(null);
+  const expressOnlineRef = useRef<boolean | null>(
+    isExpressBackendOffline() ? false : null
+  );
+  const prevStepRef = useRef<AuthStep | null>(null);
   const firebaseConfigured = isFirebaseConfigured();
 
-  const loadCaptcha = useCallback(async (clearError = false) => {
-    if (clearError) {
-      setErrorBanner(null);
-    }
-    try {
-      const res = await securityRequest<{
-        challengeId: string;
-        svg: string;
-      }>('/api/auth/captcha');
-      setCaptchaId(res.data.challengeId);
-      setCaptchaSvg(res.data.svg);
-      setCaptchaAnswer('');
-      setExpressOnline(true);
-    } catch {
-      setExpressOnline(false);
-      setCaptchaId('');
-      setCaptchaSvg('');
-    }
+  const applyClientCaptcha = useCallback(() => {
+    const next = generateClientCaptcha();
+    setCaptchaId(next.id);
+    setCaptchaSvg(next.svg);
+    setClientCaptchaCode(next.code);
+    setCaptchaSource('client');
+    setCaptchaAnswer('');
   }, []);
 
+  const loadCaptcha = useCallback(
+    async (clearError = false, forceNew = true) => {
+      if (clearError) {
+        setErrorBanner(null);
+      }
+
+      if (expressOnlineRef.current === false || isExpressBackendOffline()) {
+        expressOnlineRef.current = false;
+        if (forceNew) {
+          applyClientCaptcha();
+        }
+        return;
+      }
+
+      try {
+        const res = await securityRequest<{
+          challengeId: string;
+          svg: string;
+        }>('/api/auth/captcha');
+        if (res.data?.svg && res.data?.challengeId) {
+          setCaptchaId(res.data.challengeId);
+          setCaptchaSvg(res.data.svg);
+          setClientCaptchaCode('');
+          setCaptchaSource('server');
+          setCaptchaAnswer('');
+          expressOnlineRef.current = true;
+        } else {
+          expressOnlineRef.current = false;
+          applyClientCaptcha();
+        }
+      } catch {
+        expressOnlineRef.current = false;
+        if (forceNew) {
+          applyClientCaptcha();
+        }
+      }
+    },
+    [applyClientCaptcha]
+  );
+
   useEffect(() => {
+    const prevStep = prevStepRef.current;
+    prevStepRef.current = step;
     if (step === 'login') {
-      loadCaptcha();
+      const returningToLogin = prevStep !== null && prevStep !== 'login';
+      loadCaptcha(false, returningToLogin);
     }
   }, [step, loadCaptcha]);
 
@@ -144,6 +244,23 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       return;
     }
 
+    const normalizedCaptchaInput = captchaAnswer.trim().toUpperCase();
+    if (captchaSource === 'client') {
+      if (!clientCaptchaCode || normalizedCaptchaInput !== clientCaptchaCode) {
+        const msg =
+          'Invalid CAPTCHA verification code. Please enter the exact 5-character code shown.';
+        setErrorBanner(msg);
+        onShowToast('error', 'CAPTCHA Verification Failed', msg);
+        applyClientCaptcha();
+        return;
+      }
+    } else if (normalizedCaptchaInput.length !== 5) {
+      const msg = 'Please enter the full 5-character CAPTCHA verification code.';
+      setErrorBanner(msg);
+      onShowToast('error', 'CAPTCHA Verification Failed', msg);
+      return;
+    }
+
     setLoading(true);
     try {
       const res = await securityRequest<{
@@ -162,7 +279,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
           userId: userId.trim(),
           password,
           captchaId,
-          captchaAnswer: captchaAnswer.trim(),
+          captchaAnswer: normalizedCaptchaInput,
           rememberMe,
           otpChannel,
         }),
@@ -185,7 +302,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       const message = err instanceof Error ? err.message : 'Login failed.';
       setErrorBanner(message);
       onShowToast('error', 'Authentication Failed', message);
-      loadCaptcha(false);
+      loadCaptcha(false, true);
     } finally {
       setLoading(false);
     }
@@ -501,19 +618,20 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                       </div>
                     </div>
 
-                    {/* Server-Side CAPTCHA Verification */}
+                    {/* CAPTCHA Verification */}
                     <div>
                       <label htmlFor="auth-captcha" className="block text-xs font-medium text-neutral-800 dark:text-neutral-200 mb-1.5">
                         CAPTCHA Verification
                       </label>
                       <div className="flex items-center gap-2">
                         <div
-                          className="shrink-0 min-w-[144px] h-[40px] bg-[#fafafa] flex items-center justify-center rounded overflow-hidden border border-neutral-200 dark:border-neutral-700"
+                          data-testid="captcha-preview"
+                          className="shrink-0 w-[144px] h-[40px] bg-[#fafafa] flex items-center justify-center rounded overflow-hidden border border-neutral-200 dark:border-neutral-700 select-none"
                           dangerouslySetInnerHTML={{ __html: captchaSvg }}
                         />
                         <button
                           type="button"
-                          onClick={() => loadCaptcha(true)}
+                          onClick={() => loadCaptcha(true, true)}
                           aria-label="Refresh CAPTCHA"
                           title="Refresh CAPTCHA"
                           className="h-10 w-10 inline-flex items-center justify-center rounded-md border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800 text-neutral-600 dark:text-neutral-300 cursor-pointer shrink-0"
@@ -523,7 +641,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                         <input
                           id="auth-captcha"
                           type="text"
-                          maxLength={6}
+                          maxLength={5}
+                          autoComplete="off"
+                          spellCheck={false}
                           value={captchaAnswer}
                           onChange={(e) => setCaptchaAnswer(e.target.value.toUpperCase())}
                           placeholder="Code"

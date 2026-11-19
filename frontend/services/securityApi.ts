@@ -5,6 +5,10 @@ import { handleFirebaseApiRequest } from './firebaseApiRouter';
 let inMemoryCsrfToken: string | null = null;
 let expressBackendAvailable: boolean | null = null;
 
+export function isExpressBackendOffline(): boolean {
+  return expressBackendAvailable === false;
+}
+
 export function setCsrfToken(token: string | null) {
   inMemoryCsrfToken = token;
 }
