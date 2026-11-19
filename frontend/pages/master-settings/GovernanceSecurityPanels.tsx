@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   CheckCircle2,
   Download,
   FileUp,
   KeyRound,
+  MessageSquareText,
   RotateCcw,
   Save,
   ShieldCheck,
@@ -38,10 +39,94 @@ export const SecuritySettingsPanel: React.FC<{
   policy: SecurityPolicyConfig;
   currentUserEmail?: string;
   currentUserId?: string;
+  currentUserRole?: string;
   onShowToast?: (type: 'success' | 'error' | 'info', title: string, description?: string) => void;
-}> = ({ policy, currentUserEmail = 'mamunreja335@gmail.com', currentUserId = 'MC262711001', onShowToast }) => {
+}> = ({
+  policy,
+  currentUserEmail = 'mamunreja335@gmail.com',
+  currentUserId = 'MC2627110001',
+  currentUserRole = 'ADMIN',
+  onShowToast,
+}) => {
   const [isGAuthOpen, setIsGAuthOpen] = useState(false);
   const [gAuthEnabled, setGAuthEnabled] = useState(false);
+  const [gAuthLoading, setGAuthLoading] = useState(true);
+  const [totpVerifyCode, setTotpVerifyCode] = useState('');
+  const [totpVerifying, setTotpVerifying] = useState(false);
+  const [totpCheckMessage, setTotpCheckMessage] = useState<{
+    type: 'success' | 'error';
+    text: string;
+  } | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setGAuthLoading(true);
+    securityRequest<{ totpEnabled: boolean }>('/api/auth/totp/status')
+      .then((res) => {
+        if (active) setGAuthEnabled(Boolean(res.data?.totpEnabled));
+      })
+      .catch(() => {
+        // Non-blocking if backend/status check unavailable
+      })
+      .finally(() => {
+        if (active) setGAuthLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [currentUserId]);
+
+  const handleVerifyTotpCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setTotpCheckMessage(null);
+    const clean = totpVerifyCode.trim();
+    if (!/^\d{6}$/.test(clean)) {
+      setTotpCheckMessage({
+        type: 'error',
+        text: 'Enter a valid 6-digit code from Google Authenticator.',
+      });
+      return;
+    }
+
+    setTotpVerifying(true);
+    try {
+      await securityRequest<{ verified: boolean }>('/api/auth/totp/verify-code', {
+        method: 'POST',
+        body: JSON.stringify({ code: clean }),
+      });
+      setTotpVerifyCode('');
+      setTotpCheckMessage({
+        type: 'success',
+        text: '6-digit Google Authenticator TOTP code verified for Master Dashboard access.',
+      });
+      onShowToast?.('success', 'TOTP Code Verified', 'Google Authenticator code is valid.');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Invalid 6-digit Google Authenticator code.';
+      setTotpCheckMessage({ type: 'error', text: msg });
+      onShowToast?.('error', 'TOTP Verification Failed', msg);
+    } finally {
+      setTotpVerifying(false);
+    }
+  };
+
+  const handleDisableTotp = async () => {
+    try {
+      await securityRequest<{ totpEnabled: boolean }>('/api/auth/totp/disable', {
+        method: 'POST',
+        body: '{}',
+      });
+      setGAuthEnabled(false);
+      setTotpVerifyCode('');
+      setTotpCheckMessage(null);
+      onShowToast?.('info', 'Google Authenticator Disabled', 'SMS OTP remains active as your default 2FA channel.');
+    } catch (err) {
+      onShowToast?.(
+        'error',
+        'Unable to Disable TOTP',
+        err instanceof Error ? err.message : 'Request failed.'
+      );
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -83,50 +168,123 @@ export const SecuritySettingsPanel: React.FC<{
         </dl>
       </div>
 
-      {/* Google Authenticator (TOTP) 2FA Section */}
+      {/* Two-Factor Authentication Settings: SMS OTP + Google Authenticator (TOTP) */}
       <div className={cardCls}>
-        <div className="flex items-center justify-between border-b border-neutral-100 dark:border-neutral-800 pb-3">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-neutral-100 dark:border-neutral-800 pb-3">
+          <div className="flex items-center gap-2.5">
             <div className="p-2 bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 rounded-lg">
               <Smartphone className="h-5 w-5" />
             </div>
             <div>
               <h3 className="text-sm font-semibold text-neutral-950 dark:text-white">
-                Google Authenticator (TOTP 2FA)
+                Two-Factor Authentication (SMS &amp; Google Authenticator)
               </h3>
               <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                Connect Google Authenticator, Authy, or any TOTP app for secure 6-digit verification codes.
+                Active secure 2FA channels for {currentUserRole} ({currentUserId}): SMS OTP and Google Authenticator TOTP.
               </p>
             </div>
           </div>
-          <div>
-            <span
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
-                gAuthEnabled
-                  ? 'bg-green-100 dark:bg-green-950/60 text-green-700 dark:text-green-300'
-                  : 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300'
-              }`}
-            >
-              <span className={`h-1.5 w-1.5 rounded-full ${gAuthEnabled ? 'bg-green-600' : 'bg-amber-500'}`} />
-              {gAuthEnabled ? 'Active' : 'Not Linked'}
-            </span>
-          </div>
+          <span
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium w-fit ${
+              gAuthEnabled
+                ? 'bg-green-100 dark:bg-green-950/60 text-green-700 dark:text-green-300'
+                : 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300'
+            }`}
+          >
+            <span className={`h-1.5 w-1.5 rounded-full ${gAuthEnabled ? 'bg-green-600' : 'bg-amber-500'}`} />
+            {gAuthLoading ? 'Checking...' : gAuthEnabled ? 'SMS + Google Auth Active' : 'SMS Active (TOTP Not Linked)'}
+          </span>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-2">
-          <div className="text-xs text-neutral-600 dark:text-neutral-400 space-y-1 max-w-lg">
-            <p>
-              Enhance your MUN COMPUTER account security by requiring a 6-digit verification code from Google Authenticator every time you sign in or perform sensitive administrative actions.
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Option 1: SMS OTP Channel (Active Default) */}
+          <div className="p-4 bg-neutral-50 dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-800 rounded-lg space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <MessageSquareText className="h-4 w-4 text-blue-700 dark:text-blue-400" />
+                <span className="text-xs font-semibold text-neutral-950 dark:text-white">
+                  SMS Verification Channel
+                </span>
+              </div>
+              <span className="text-[11px] font-mono font-semibold text-green-700 dark:text-green-400">
+                ACTIVE DEFAULT
+              </span>
+            </div>
+            <p className="text-xs text-neutral-600 dark:text-neutral-400">
+              Primary 6-digit OTP channel enforced on User ID sign-in after credential and CAPTCHA verification.
             </p>
+            <div className="text-[11px] font-mono text-neutral-500 dark:text-neutral-400 pt-1">
+              Channel: SMS · 5-minute TTL · Account: {currentUserId}
+            </div>
           </div>
-          <Button
-            type="button"
-            variant={gAuthEnabled ? 'secondary' : 'primary'}
-            size="md"
-            onClick={() => setIsGAuthOpen(true)}
-          >
-            {gAuthEnabled ? 'Reconfigure Google Authenticator' : 'Setup Google Authenticator'}
-          </Button>
+
+          {/* Option 2: Dedicated Google Authenticator / TOTP Code Box */}
+          <div className="p-4 bg-neutral-50 dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-800 rounded-lg space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <KeyRound className="h-4 w-4 text-blue-700 dark:text-blue-400" />
+                <span className="text-xs font-semibold text-neutral-950 dark:text-white">
+                  Google Authenticator / TOTP Code
+                </span>
+              </div>
+              <span className="text-[11px] font-mono font-semibold text-neutral-700 dark:text-neutral-300">
+                {gAuthEnabled ? 'LINKED' : 'NOT LINKED'}
+              </span>
+            </div>
+
+            {gAuthEnabled ? (
+              <form onSubmit={handleVerifyTotpCode} className="space-y-2.5">
+                <label htmlFor="settings-totp-code" className="block text-[11px] font-medium text-neutral-700 dark:text-neutral-300">
+                  Enter 6-Digit Google Authenticator Code (Test / Verify Admin Access)
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    id="settings-totp-code"
+                    type="text"
+                    maxLength={6}
+                    value={totpVerifyCode}
+                    onChange={(e) => setTotpVerifyCode(e.target.value.replace(/\D/g, ''))}
+                    placeholder="000000"
+                    className="flex-1 h-9 px-3 text-center text-sm tracking-[0.35em] font-mono bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-md focus:outline-none focus:border-blue-800"
+                  />
+                  <Button type="submit" variant="primary" size="sm" loading={totpVerifying}>
+                    Verify Code
+                  </Button>
+                </div>
+                {totpCheckMessage && (
+                  <p
+                    className={`text-[11px] ${
+                      totpCheckMessage.type === 'success'
+                        ? 'text-green-700 dark:text-green-400'
+                        : 'text-red-600 dark:text-red-400'
+                    }`}
+                  >
+                    {totpCheckMessage.text}
+                  </p>
+                )}
+              </form>
+            ) : (
+              <p className="text-xs text-neutral-600 dark:text-neutral-400">
+                Link Google Authenticator to enable 6-digit offline TOTP codes alongside SMS OTP during Step 3 login verification.
+              </p>
+            )}
+
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <Button
+                type="button"
+                variant={gAuthEnabled ? 'secondary' : 'primary'}
+                size="sm"
+                onClick={() => setIsGAuthOpen(true)}
+              >
+                {gAuthEnabled ? 'Reconfigure TOTP Key' : 'Setup Google Authenticator'}
+              </Button>
+              {gAuthEnabled && (
+                <Button type="button" variant="outline" size="sm" onClick={handleDisableTotp}>
+                  Disable TOTP
+                </Button>
+              )}
+            </div>
+          </div>
         </div>
 
         <GoogleAuthenticatorModal
@@ -135,7 +293,10 @@ export const SecuritySettingsPanel: React.FC<{
           userEmail={currentUserEmail}
           userId={currentUserId}
           onShowToast={onShowToast || (() => {})}
-          onSuccess={() => setGAuthEnabled(true)}
+          onSuccess={() => {
+            setGAuthEnabled(true);
+            setTotpCheckMessage(null);
+          }}
         />
       </div>
     </div>

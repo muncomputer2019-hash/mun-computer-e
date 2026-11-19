@@ -126,8 +126,8 @@ test('Q1-Q12: Customer CRM duplicate checks, OTP verification, 7 consents, bulk 
   const baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 
   try {
-    const adminCookies = await loginAs(baseUrl, securityStore, 'MC-AD-202613-0001', 'Admin@2026!');
-    const staffCookies = await loginAs(baseUrl, securityStore, 'MC-ST-202613-0003', 'Staff@2026!');
+    const adminCookies = await loginAs(baseUrl, securityStore, 'MC2627110001', '8101352105');
+    const staffCookies = await loginAs(baseUrl, securityStore, 'MC2627110003', 'Staff@2026!');
 
     // 1. Create unique customer -> MCC-YYYY-YY-NNNNNN & Aadhaar always masked
     const c1 = await requestApi(
@@ -218,7 +218,7 @@ test('Q1-Q12: Customer CRM duplicate checks, OTP verification, 7 consents, bulk 
     );
     assert.equal(otpVer.status, 200);
 
-    const managerCookies = await loginAs(baseUrl, securityStore, 'MC-MN-202613-0002', 'Manager@2026!');
+    const managerCookies = await loginAs(baseUrl, securityStore, 'MC2627110002', 'Manager@2026!');
 
     // Staff lacks customers.EDIT (403); Manager succeeds (200)
     const staffVerifyRes = await requestApi(
@@ -302,9 +302,9 @@ test('Q13-Q35: Dynamic Form Versioning, Private Docs, 12-Status State Machine, S
   const baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 
   try {
-    const adminCookies = await loginAs(baseUrl, securityStore, 'MC-AD-202613-0001', 'Admin@2026!');
-    const managerCookies = await loginAs(baseUrl, securityStore, 'MC-MN-202613-0002', 'Manager@2026!');
-    const staffCookies = await loginAs(baseUrl, securityStore, 'MC-ST-202613-0003', 'Staff@2026!');
+    const adminCookies = await loginAs(baseUrl, securityStore, 'MC2627110001', '8101352105');
+    const managerCookies = await loginAs(baseUrl, securityStore, 'MC2627110002', 'Manager@2026!');
+    const staffCookies = await loginAs(baseUrl, securityStore, 'MC2627110003', 'Staff@2026!');
 
     // Get seeded PAN/Passport service (MCS-2026-27-000002) & customer
     const servicesRes = await requestApi(baseUrl, 'GET', '/api/erp/services', undefined, adminCookies);
@@ -544,9 +544,9 @@ test('Q13-Q35: Dynamic Form Versioning, Private Docs, 12-Status State Machine, S
 
     // 6. Record-level isolation: assign app2 exclusively to a second Staff -> seeded Staff cannot access (403)
     const targetApp2 = erpStore.applications.find((a) => a.applicationNo === app2No)!;
-    targetApp2.assignedStaffId = 'MC-ST-202613-9999';
+    targetApp2.assignedStaffId = 'MC2627119999';
     targetApp2.assignedCounterCode = 'CTR-99';
-    targetApp2.createdBy = 'MC-AD-202613-0001';
+    targetApp2.createdBy = 'MC2627110001';
 
     const isolatedAccess = await requestApi(
       baseUrl,
@@ -562,7 +562,7 @@ test('Q13-Q35: Dynamic Form Versioning, Private Docs, 12-Status State Machine, S
       baseUrl,
       'POST',
       `/api/erp/applications/${app1No}/reassignment-requests`,
-      { proposedStaffId: 'MC-MN-202613-0002', proposedCounterCode: 'CTR-02', reason: 'Shift handover' },
+      { proposedStaffId: 'MC2627110002', proposedCounterCode: 'CTR-02', reason: 'Shift handover' },
       staffCookies
     );
     assert.equal(reassReq.status, 201);
@@ -587,8 +587,8 @@ test('Q36-Q51: Delivery Handover, Payments/UPI Verification, Refunds Guard, Note
   const baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 
   try {
-    const adminCookies = await loginAs(baseUrl, securityStore, 'MC-AD-202613-0001', 'Admin@2026!');
-    const staffCookies = await loginAs(baseUrl, securityStore, 'MC-ST-202613-0003', 'Staff@2026!');
+    const adminCookies = await loginAs(baseUrl, securityStore, 'MC2627110001', '8101352105');
+    const staffCookies = await loginAs(baseUrl, securityStore, 'MC2627110003', 'Staff@2026!');
 
     const appsRes = await requestApi(baseUrl, 'GET', '/api/erp/applications', undefined, adminCookies);
     const pendingOfficeApp = appsRes.body.data.find((a: any) => a.applicationNo === 'MCA-2026-27-000002');

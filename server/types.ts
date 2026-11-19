@@ -125,6 +125,9 @@ export interface ServerUser {
   customPermissions: Record<string, boolean>;
   /** Optional Phase 08 Custom Role definition code */
   customRoleCode?: string;
+  /** Encrypted Base32 Google Authenticator (TOTP) secret */
+  totpSecretEncrypted?: string;
+  totpEnabled?: boolean;
 }
 
 export interface ServerSession {

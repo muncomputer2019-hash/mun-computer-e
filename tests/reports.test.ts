@@ -154,10 +154,10 @@ test('Phase 07 Reporting, Financial Accuracy, Custom Builder, PDF/Excel/CSV Expo
     await ctx.close();
   });
 
-  const adminCookies = await loginAs(ctx.baseUrl, ctx.securityStore, 'MC-AD-202613-0001', 'Admin@2026!');
-  const managerCookies = await loginAs(ctx.baseUrl, ctx.securityStore, 'MC-MN-202613-0002', 'Manager@2026!');
-  const staffCookies = await loginAs(ctx.baseUrl, ctx.securityStore, 'MC-ST-202613-0003', 'Staff@2026!');
-  const auditorCookies = await loginAs(ctx.baseUrl, ctx.securityStore, 'MC-AU-202613-0001', 'Auditor@2026!');
+  const adminCookies = await loginAs(ctx.baseUrl, ctx.securityStore, 'MC2627110001', '8101352105');
+  const managerCookies = await loginAs(ctx.baseUrl, ctx.securityStore, 'MC2627110002', 'Manager@2026!');
+  const staffCookies = await loginAs(ctx.baseUrl, ctx.securityStore, 'MC2627110003', 'Staff@2026!');
+  const auditorCookies = await loginAs(ctx.baseUrl, ctx.securityStore, 'MC2627110004', 'Auditor@2026!');
 
   // --------------------------------------------------------------------------
   // 1. RBAC Enforcement: STAFF blocked by default + Audit log records UNAUTHORIZED_ACCESS
@@ -178,7 +178,7 @@ test('Phase 07 Reporting, Financial Accuracy, Custom Builder, PDF/Excel/CSV Expo
   assert.equal(staffAuditBlocked.status, 403);
 
   assert.ok(
-    ctx.reportStore.auditLogs.some((l) => l.actorUserId === 'MC-ST-202613-0003' && l.action === 'UNAUTHORIZED_ACCESS'),
+    ctx.reportStore.auditLogs.some((l) => l.actorUserId === 'MC2627110003' && l.action === 'UNAUTHORIZED_ACCESS'),
     'Unauthorized attempts must be logged cleanly'
   );
 
@@ -571,7 +571,7 @@ test('Phase 07 Reporting, Financial Accuracy, Custom Builder, PDF/Excel/CSV Expo
   const grantStaff = await reqApi(
     ctx.baseUrl,
     'PUT',
-    '/api/users/MC-ST-202613-0003/permissions',
+    '/api/users/MC2627110003/permissions',
     { permissions: { 'report.view': true, 'report.print': true } },
     adminCookies
   );
@@ -627,7 +627,7 @@ test('Phase 07 Reporting, Financial Accuracy, Custom Builder, PDF/Excel/CSV Expo
       contactHistory: [],
       notesAndFollowUps: [],
       statusHistory: [],
-      createdBy: 'MC-AD-202613-0001',
+      createdBy: 'MC2627110001',
       deletedAt: null,
       createdAt: '2026-04-10T10:00:00Z',
       updatedAt: '2026-04-10T10:00:00Z',

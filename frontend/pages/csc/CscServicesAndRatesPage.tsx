@@ -25,6 +25,7 @@ import { UserProfile } from '../../modules/types';
 import { paginateArray } from '../../services/apiClient';
 import { cscApi } from '../../services/cscApi';
 import { formatDateIST, formatDateTimeIST, formatINR } from '../../services/formatters';
+import { extractFriendlyErrorMessage } from '../../services/firebase';
 
 interface CscServicesAndRatesPageProps {
   currentUser: UserProfile;
@@ -59,12 +60,15 @@ export const CscServicesAndRatesPage: React.FC<CscServicesAndRatesPageProps> = (
   const [rateEffectiveDate, setRateEffectiveDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [rateReason, setRateReason] = useState('');
   const [savingRate, setSavingRate] = useState(false);
+  const [rateError, setRateError] = useState<string | null>(null);
 
   const [catModalOpen, setCatModalOpen] = useState(false);
   const [editingCat, setEditingCat] = useState<CscCategory | null>(null);
   const [catName, setCatName] = useState('');
   const [catCode, setCatCode] = useState('');
   const [catDesc, setCatDesc] = useState('');
+  const [savingCat, setSavingCat] = useState(false);
+  const [catError, setCatError] = useState<string | null>(null);
 
   const [svcModalOpen, setSvcModalOpen] = useState(false);
   const [editingSvc, setEditingSvc] = useState<CscService | null>(null);
@@ -74,6 +78,8 @@ export const CscServicesAndRatesPage: React.FC<CscServicesAndRatesPageProps> = (
   const [svcDesc, setSvcDesc] = useState('');
   const [svcDocs, setSvcDocs] = useState('Aadhaar Card (Masked), Applicant Photo, Mobile Number');
   const [svcAvailability, setSvcAvailability] = useState<'Available' | 'Unavailable'>('Available');
+  const [savingSvc, setSavingSvc] = useState(false);
+  const [svcError, setSvcError] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -87,7 +93,7 @@ export const CscServicesAndRatesPage: React.FC<CscServicesAndRatesPageProps> = (
       setServices(svcRes.data);
       setRateHistory(histRes.data);
     } catch (err) {
-      onShowToast('error', 'Failed to load CSC Catalog', err instanceof Error ? err.message : undefined);
+      onShowToast('error', 'Failed to load CSC Catalog', extractFriendlyErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -122,6 +128,7 @@ export const CscServicesAndRatesPage: React.FC<CscServicesAndRatesPageProps> = (
   const configuredCount = services.length - blankCount;
 
   const openRateModal = (svc: CscService) => {
+    setRateError(null);
     setRateModalService(svc);
     setRateServiceCharge(svc.serviceCharge !== null ? String(svc.serviceCharge) : '');
     setRateGovtFee(svc.govtFee !== null ? String(svc.govtFee) : '0');
@@ -133,10 +140,13 @@ export const CscServicesAndRatesPage: React.FC<CscServicesAndRatesPageProps> = (
   const handleSaveRate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!rateModalService) return;
+    setRateError(null);
     const sc = Number(rateServiceCharge);
     const gf = Number(rateGovtFee || 0);
     if (!Number.isFinite(sc) || sc < 0 || !Number.isFinite(gf) || gf < 0) {
-      onShowToast('error', 'Invalid Rate', 'Service Charge and Government Fee must be 0 or greater.');
+      const msg = 'Service Charge and Government Fee must be 0 or greater.';
+      setRateError(msg);
+      onShowToast('error', 'Invalid Rate', msg);
       return;
     }
     setSavingRate(true);
@@ -156,7 +166,9 @@ export const CscServicesAndRatesPage: React.FC<CscServicesAndRatesPageProps> = (
       setRateModalService(null);
       await loadData();
     } catch (err) {
-      onShowToast('error', 'Rate Update Blocked', err instanceof Error ? err.message : undefined);
+      const msg = extractFriendlyErrorMessage(err, 'Unable to update service rate.');
+      setRateError(msg);
+      onShowToast('error', 'Rate Update Blocked', msg);
     } finally {
       setSavingRate(false);
     }
@@ -164,37 +176,57 @@ export const CscServicesAndRatesPage: React.FC<CscServicesAndRatesPageProps> = (
 
   const handleSaveCategory = async (e: React.FormEvent) => {
     e.preventDefault();
+    setCatError(null);
+    if (!catName.trim() || catName.trim().length < 2) {
+      setCatError('Category name must be at least 2 characters.');
+      return;
+    }
+    setSavingCat(true);
     try {
       if (editingCat) {
         await cscApi.updateCategory(editingCat.id, {
-          name: catName,
-          code: catCode,
-          description: catDesc,
+          name: catName.trim(),
+          code: catCode.trim(),
+          description: catDesc.trim(),
         });
         onShowToast('success', 'Category Updated');
       } else {
-        await cscApi.createCategory({ name: catName, code: catCode || undefined, description: catDesc });
+        await cscApi.createCategory({
+          name: catName.trim(),
+          code: catCode.trim() || undefined,
+          description: catDesc.trim(),
+        });
         onShowToast('success', 'Category Created');
       }
       setCatModalOpen(false);
       await loadData();
     } catch (err) {
-      onShowToast('error', 'Category Error', err instanceof Error ? err.message : undefined);
+      const msg = extractFriendlyErrorMessage(err, 'Unable to save category.');
+      setCatError(msg);
+      onShowToast('error', 'Category Error', msg);
+    } finally {
+      setSavingCat(false);
     }
   };
 
   const handleSaveService = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSvcError(null);
+    if (!svcName.trim() || svcName.trim().length < 2) {
+      setSvcError('Service name must be at least 2 characters.');
+      return;
+    }
     const requiredDocuments = svcDocs
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean);
+    setSavingSvc(true);
     try {
       if (editingSvc) {
         await cscApi.updateService(editingSvc.id, {
-          name: svcName,
-          subGroup: svcSubGroup,
-          description: svcDesc,
+          name: svcName.trim(),
+          subGroup: svcSubGroup.trim(),
+          description: svcDesc.trim(),
           requiredDocuments,
           availability: svcAvailability,
         });
@@ -202,9 +234,9 @@ export const CscServicesAndRatesPage: React.FC<CscServicesAndRatesPageProps> = (
       } else {
         await cscApi.createService({
           categoryId: svcCatId || categories[0]?.id || 'CAT-01',
-          name: svcName,
-          subGroup: svcSubGroup,
-          description: svcDesc,
+          name: svcName.trim(),
+          subGroup: svcSubGroup.trim(),
+          description: svcDesc.trim(),
           requiredDocuments,
         });
         onShowToast(
@@ -216,7 +248,11 @@ export const CscServicesAndRatesPage: React.FC<CscServicesAndRatesPageProps> = (
       setSvcModalOpen(false);
       await loadData();
     } catch (err) {
-      onShowToast('error', 'Service Error', err instanceof Error ? err.message : undefined);
+      const msg = extractFriendlyErrorMessage(err, 'Unable to save service.');
+      setSvcError(msg);
+      onShowToast('error', 'Service Error', msg);
+    } finally {
+      setSavingSvc(false);
     }
   };
 
@@ -226,7 +262,7 @@ export const CscServicesAndRatesPage: React.FC<CscServicesAndRatesPageProps> = (
       onShowToast('success', 'Service Duplicated', `${res.data.name} created with blank rate.`);
       await loadData();
     } catch (err) {
-      onShowToast('error', 'Duplicate Failed', err instanceof Error ? err.message : undefined);
+      onShowToast('error', 'Duplicate Failed', extractFriendlyErrorMessage(err));
     }
   };
 
@@ -276,10 +312,12 @@ export const CscServicesAndRatesPage: React.FC<CscServicesAndRatesPageProps> = (
           {isAdmin && (
             <>
               <Button
+                type="button"
                 variant="outline"
                 size="sm"
                 icon={<FolderPlus className="h-3.5 w-3.5" />}
                 onClick={() => {
+                  setCatError(null);
                   setEditingCat(null);
                   setCatName('');
                   setCatCode('');
@@ -290,10 +328,12 @@ export const CscServicesAndRatesPage: React.FC<CscServicesAndRatesPageProps> = (
                 Add Category
               </Button>
               <Button
+                type="button"
                 variant="primary"
                 size="sm"
                 icon={<Plus className="h-3.5 w-3.5" />}
                 onClick={() => {
+                  setSvcError(null);
                   setEditingSvc(null);
                   setSvcCatId(selectedCatId !== 'ALL' ? selectedCatId : categories[0]?.id || 'CAT-01');
                   setSvcName('');
@@ -370,6 +410,7 @@ export const CscServicesAndRatesPage: React.FC<CscServicesAndRatesPageProps> = (
                       type="button"
                       title="Edit Category"
                       onClick={() => {
+                        setCatError(null);
                         setEditingCat(cat);
                         setCatName(cat.name);
                         setCatCode(cat.code);
@@ -493,6 +534,7 @@ export const CscServicesAndRatesPage: React.FC<CscServicesAndRatesPageProps> = (
                                   type="button"
                                   title="Edit Service Details"
                                   onClick={() => {
+                                    setSvcError(null);
                                     setEditingSvc(svc);
                                     setSvcCatId(svc.categoryId);
                                     setSvcName(svc.name);
@@ -613,10 +655,18 @@ export const CscServicesAndRatesPage: React.FC<CscServicesAndRatesPageProps> = (
       {/* Dynamic Rate Configuration Modal */}
       <Modal
         isOpen={Boolean(rateModalService)}
-        onClose={() => setRateModalService(null)}
+        onClose={() => {
+          setRateError(null);
+          setRateModalService(null);
+        }}
         title={`Configure Rate — ${rateModalService?.name || ''}`}
       >
-        <form onSubmit={handleSaveRate} className="space-y-4 text-xs">
+        <form onSubmit={handleSaveRate} className="space-y-4 text-xs" noValidate>
+          {rateError && (
+            <div role="alert" className="px-3 py-2 rounded border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300">
+              {rateError}
+            </div>
+          )}
           <div className="p-3 rounded bg-neutral-50 dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-800">
             <div className="font-mono text-[11px] text-neutral-500">
               {rateModalService?.code} · {rateModalService?.categoryName}
@@ -716,17 +766,28 @@ export const CscServicesAndRatesPage: React.FC<CscServicesAndRatesPageProps> = (
       {/* Category Modal */}
       <Modal
         isOpen={catModalOpen}
-        onClose={() => setCatModalOpen(false)}
+        onClose={() => {
+          setCatError(null);
+          setCatModalOpen(false);
+        }}
         title={editingCat ? 'Edit Category' : 'Add Service Category'}
       >
-        <form onSubmit={handleSaveCategory} className="space-y-3 text-xs">
+        <form onSubmit={handleSaveCategory} className="space-y-3 text-xs" noValidate>
+          {catError && (
+            <div role="alert" className="px-3 py-2 rounded border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300">
+              {catError}
+            </div>
+          )}
           <div>
             <label className="block font-medium mb-1">Category Name *</label>
             <input
               type="text"
               required
               value={catName}
-              onChange={(e) => setCatName(e.target.value)}
+              onChange={(e) => {
+                setCatError(null);
+                setCatName(e.target.value);
+              }}
               className="w-full h-9 px-3 bg-white dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-700 rounded"
             />
           </div>
@@ -750,10 +811,18 @@ export const CscServicesAndRatesPage: React.FC<CscServicesAndRatesPageProps> = (
             />
           </div>
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" size="sm" onClick={() => setCatModalOpen(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setCatError(null);
+                setCatModalOpen(false);
+              }}
+            >
               Cancel
             </Button>
-            <Button type="submit" variant="primary" size="sm">
+            <Button type="submit" variant="primary" size="sm" loading={savingCat}>
               Save Category
             </Button>
           </div>
@@ -763,10 +832,18 @@ export const CscServicesAndRatesPage: React.FC<CscServicesAndRatesPageProps> = (
       {/* Service Modal */}
       <Modal
         isOpen={svcModalOpen}
-        onClose={() => setSvcModalOpen(false)}
+        onClose={() => {
+          setSvcError(null);
+          setSvcModalOpen(false);
+        }}
         title={editingSvc ? 'Edit CSC Service' : 'Create CSC Service (Starts with Blank Rate)'}
       >
-        <form onSubmit={handleSaveService} className="space-y-3 text-xs">
+        <form onSubmit={handleSaveService} className="space-y-3 text-xs" noValidate>
+          {svcError && (
+            <div role="alert" className="px-3 py-2 rounded border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300">
+              {svcError}
+            </div>
+          )}
           {!editingSvc && (
             <div>
               <label className="block font-medium mb-1">Category *</label>
@@ -789,7 +866,10 @@ export const CscServicesAndRatesPage: React.FC<CscServicesAndRatesPageProps> = (
               type="text"
               required
               value={svcName}
-              onChange={(e) => setSvcName(e.target.value)}
+              onChange={(e) => {
+                setSvcError(null);
+                setSvcName(e.target.value);
+              }}
               className="w-full h-9 px-3 bg-white dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-700 rounded"
             />
           </div>
@@ -834,10 +914,18 @@ export const CscServicesAndRatesPage: React.FC<CscServicesAndRatesPageProps> = (
             />
           </div>
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" size="sm" onClick={() => setSvcModalOpen(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setSvcError(null);
+                setSvcModalOpen(false);
+              }}
+            >
               Cancel
             </Button>
-            <Button type="submit" variant="primary" size="sm">
+            <Button type="submit" variant="primary" size="sm" loading={savingSvc}>
               {editingSvc ? 'Update Service' : 'Create (Rate Blank)'}
             </Button>
           </div>

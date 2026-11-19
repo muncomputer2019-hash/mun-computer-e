@@ -147,7 +147,7 @@ export const OperatorControlPage: React.FC<OperatorControlPageProps> = ({
           Provision Customer Portal Credentials (Self-Service Tracking)
         </div>
         <p className="text-neutral-500">
-          Generate a citizen Customer Portal login (<code className="font-mono">MC-CU-YYYYPP-XXXX</code>) for any registered CSC customer ID.
+          Generate a citizen Customer Portal login (<code className="font-mono">MCYYFFMMSSSS</code>, e.g. <code className="font-mono">MC2627110005</code>) for any registered CSC customer ID.
         </p>
         <form
           onSubmit={async (e) => {

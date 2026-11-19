@@ -8,7 +8,7 @@ import {
 
 export const DEMO_USER: UserProfile = {
   id: 1,
-  userId: 'MC-AD-202613-0001',
+  userId: 'MC2627110001',
   fullName: 'Mamun Reja',
   email: 'admin@muncomputer.local',
   role: 'ADMIN',

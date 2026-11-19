@@ -13,6 +13,7 @@ import { StatusText } from '../../components/StatusText';
 import { UserProfile } from '../../modules/types';
 import { cscApi } from '../../services/cscApi';
 import { formatDateIST, formatINR } from '../../services/formatters';
+import { extractFriendlyErrorMessage } from '../../services/firebase';
 
 interface GrievanceRtiPageProps {
   currentUser: UserProfile;
@@ -28,6 +29,9 @@ export const GrievanceRtiPage: React.FC<GrievanceRtiPageProps> = ({ currentUser,
 
   // Create Modal
   const [createOpen, setCreateOpen] = useState(false);
+  const [savingCreate, setSavingCreate] = useState(false);
+  const [savingUpdate, setSavingUpdate] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const [custName, setCustName] = useState('');
   const [custMobile, setCustMobile] = useState('');
   const [district, setDistrict] = useState('North 24 Parganas');
@@ -72,7 +76,7 @@ export const GrievanceRtiPage: React.FC<GrievanceRtiPageProps> = ({ currentUser,
         if (ref) setSelected(ref);
       }
     } catch (err) {
-      onShowToast('error', 'Failed to load Grievances', err instanceof Error ? err.message : undefined);
+      onShowToast('error', 'Failed to load Grievances', extractFriendlyErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -101,22 +105,30 @@ export const GrievanceRtiPage: React.FC<GrievanceRtiPageProps> = ({ currentUser,
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    setCreateError(null);
+    if (!custName.trim() || custMobile.trim().length < 10 || !department.trim() || !subject.trim()) {
+      const msg = 'Applicant Name, 10-digit Mobile, Department, and Subject are required.';
+      setCreateError(msg);
+      onShowToast('error', 'Validation Failed', msg);
+      return;
+    }
+    setSavingCreate(true);
     try {
       const res = await cscApi.createGrievance({
-        customerName: custName,
-        mobile: custMobile,
-        district,
-        blockOrMunicipality: blockMun,
+        customerName: custName.trim(),
+        mobile: custMobile.trim(),
+        district: district.trim(),
+        blockOrMunicipality: blockMun.trim(),
         complaintCategory: category,
         serviceType,
-        department,
-        authority,
-        complaintSubject: subject,
-        complaintDetails: details,
+        department: department.trim(),
+        authority: authority.trim(),
+        complaintSubject: subject.trim(),
+        complaintDetails: details.trim(),
         isRti,
         rtiType: isRti ? rtiType : undefined,
-        pioName: isRti ? pioName : undefined,
-        faaName: isRti ? faaName : undefined,
+        pioName: isRti ? pioName.trim() : undefined,
+        faaName: isRti ? faaName.trim() : undefined,
         serviceCharge: Number(serviceCharge || 0),
         govtFee: Number(govtFee || 0),
         paidAmount: Number(paidAmount || 0),
@@ -129,13 +141,18 @@ export const GrievanceRtiPage: React.FC<GrievanceRtiPageProps> = ({ currentUser,
       setSelected(res.data);
       await loadData();
     } catch (err) {
-      onShowToast('error', 'Registration Failed', err instanceof Error ? err.message : undefined);
+      const msg = extractFriendlyErrorMessage(err, 'Unable to register dossier.');
+      setCreateError(msg);
+      onShowToast('error', 'Registration Failed', msg);
+    } finally {
+      setSavingCreate(false);
     }
   };
 
   const handleUpdateDossier = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selected) return;
+    setSavingUpdate(true);
     try {
       const res = await cscApi.updateGrievanceStatus(selected.internalTrackingId, {
         complaintStatus: nextStatus,
@@ -150,7 +167,9 @@ export const GrievanceRtiPage: React.FC<GrievanceRtiPageProps> = ({ currentUser,
       onShowToast('success', 'Grievance / RTI Updated', `${res.data.internalTrackingId} → ${res.data.complaintStatus}`);
       await loadData();
     } catch (err) {
-      onShowToast('error', 'Update Failed', err instanceof Error ? err.message : undefined);
+      onShowToast('error', 'Update Failed', extractFriendlyErrorMessage(err));
+    } finally {
+      setSavingUpdate(false);
     }
   };
 
@@ -167,7 +186,16 @@ export const GrievanceRtiPage: React.FC<GrievanceRtiPageProps> = ({ currentUser,
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <Button variant="primary" size="sm" icon={<Plus className="h-3.5 w-3.5" />} onClick={() => setCreateOpen(true)}>
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
+            icon={<Plus className="h-3.5 w-3.5" />}
+            onClick={() => {
+              setCreateError(null);
+              setCreateOpen(true);
+            }}
+          >
             New Grievance / RTI Dossier
           </Button>
           <Button variant="outline" size="sm" onClick={loadData} loading={loading} icon={<RefreshCw className="h-3.5 w-3.5" />}>
@@ -345,7 +373,7 @@ export const GrievanceRtiPage: React.FC<GrievanceRtiPageProps> = ({ currentUser,
                   />
                 </div>
 
-                <Button type="submit" variant="primary" size="sm" className="w-full" icon={<MessageSquarePlus className="h-3.5 w-3.5" />}>
+                <Button type="submit" variant="primary" size="sm" loading={savingUpdate} className="w-full" icon={<MessageSquarePlus className="h-3.5 w-3.5" />}>
                   Save Dossier Update
                 </Button>
               </>
@@ -370,11 +398,19 @@ export const GrievanceRtiPage: React.FC<GrievanceRtiPageProps> = ({ currentUser,
       {/* Create Grievance / RTI Modal */}
       <Modal
         isOpen={createOpen}
-        onClose={() => setCreateOpen(false)}
+        onClose={() => {
+          setCreateError(null);
+          setCreateOpen(false);
+        }}
         title="Register Public Grievance / RTI / Appeal"
         maxWidthClass="max-w-3xl"
       >
-        <form onSubmit={handleCreate} className="space-y-3 text-xs">
+        <form onSubmit={handleCreate} className="space-y-3 text-xs" noValidate>
+          {createError && (
+            <div role="alert" className="px-3 py-2 rounded border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300">
+              {createError}
+            </div>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <input
               type="text"
@@ -552,10 +588,18 @@ export const GrievanceRtiPage: React.FC<GrievanceRtiPageProps> = ({ currentUser,
           </div>
 
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" size="sm" onClick={() => setCreateOpen(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setCreateError(null);
+                setCreateOpen(false);
+              }}
+            >
               Cancel
             </Button>
-            <Button type="submit" variant="primary" size="sm">
+            <Button type="submit" variant="primary" size="sm" loading={savingCreate}>
               Register Dossier
             </Button>
           </div>

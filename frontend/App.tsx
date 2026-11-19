@@ -20,6 +20,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import {
   auth,
   ensureFirebaseUserProfile,
+  isFirebase2faPending,
   signOutFirebase,
 } from './services/firebase';
 import { securityRequest, setCsrfToken } from './services/securityApi';
@@ -194,9 +195,13 @@ export function MunComputerApp() {
       const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
         if (!active) return;
         if (fbUser) {
+          if (isFirebase2faPending()) {
+            if (active) setAuthChecking(false);
+            return;
+          }
           try {
             const { user, permissions } = await ensureFirebaseUserProfile(fbUser);
-            if (!active) return;
+            if (!active || isFirebase2faPending()) return;
             setCurrentUser({ ...user, permissions });
             if (user.role === 'CUSTOMER') {
               setActivePage('customer-portal');

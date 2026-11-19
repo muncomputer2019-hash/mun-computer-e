@@ -135,7 +135,7 @@ export class CscStore {
       registrationDate: now.slice(0, 10),
       remarks: 'Linked Citizen Customer Portal Profile',
       accountStatus: 'Active',
-      portalUid: 'MC-CU-202613-0001',
+      portalUid: 'MC2627110005',
       createdAt: now,
       updatedAt: now,
     });

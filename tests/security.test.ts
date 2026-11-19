@@ -139,13 +139,13 @@ test('1-3. Admin, Manager, and Staff logins with CAPTCHA and OTP verification', 
     assert.equal(capRes.status, 200);
     assert.ok(capRes.body.data.svg.includes('<svg'));
 
-    const admin = await loginAs(baseUrl, store, 'MC-AD-202613-0001', 'Admin@2026!');
+    const admin = await loginAs(baseUrl, store, 'MC2627110001', '8101352105');
     assert.equal(admin.user.role, 'ADMIN');
 
-    const manager = await loginAs(baseUrl, store, 'MC-MN-202613-0002', 'Manager@2026!');
+    const manager = await loginAs(baseUrl, store, 'MC2627110002', 'Manager@2026!');
     assert.equal(manager.user.role, 'MANAGER');
 
-    const staff = await loginAs(baseUrl, store, 'MC-ST-202613-0003', 'Staff@2026!');
+    const staff = await loginAs(baseUrl, store, 'MC2627110003', 'Staff@2026!');
     assert.equal(staff.user.role, 'STAFF');
   });
 });
@@ -156,7 +156,7 @@ test('4-5. Invalid password, invalid OTP rejection, and account lockout after 5 
     for (let i = 0; i < 4; i += 1) {
       const cap = issueTestCaptcha(store);
       const res = await requestJson(baseUrl, 'POST', '/api/auth/login', {
-        userId: 'MC-ST-202613-0003',
+        userId: 'MC2627110003',
         password: 'WrongPassword123',
         captchaId: cap.id,
         captchaAnswer: cap.answer,
@@ -167,7 +167,7 @@ test('4-5. Invalid password, invalid OTP rejection, and account lockout after 5 
     // 5th attempt triggers lock (423)
     const cap5 = issueTestCaptcha(store);
     const lockRes = await requestJson(baseUrl, 'POST', '/api/auth/login', {
-      userId: 'MC-ST-202613-0003',
+      userId: 'MC2627110003',
       password: 'WrongPassword123',
       captchaId: cap5.id,
       captchaAnswer: cap5.answer,
@@ -177,7 +177,7 @@ test('4-5. Invalid password, invalid OTP rejection, and account lockout after 5 
     // Even valid password is blocked while locked
     const cap6 = issueTestCaptcha(store);
     const blockedRes = await requestJson(baseUrl, 'POST', '/api/auth/login', {
-      userId: 'MC-ST-202613-0003',
+      userId: 'MC2627110003',
       password: 'Staff@2026!',
       captchaId: cap6.id,
       captchaAnswer: cap6.answer,
@@ -187,8 +187,8 @@ test('4-5. Invalid password, invalid OTP rejection, and account lockout after 5 
     // Invalid OTP check on Admin account
     const adminCap = issueTestCaptcha(store);
     const loginRes = await requestJson(baseUrl, 'POST', '/api/auth/login', {
-      userId: 'MC-AD-202613-0001',
-      password: 'Admin@2026!',
+      userId: 'MC2627110001',
+      password: '8101352105',
       captchaId: adminCap.id,
       captchaAnswer: adminCap.answer,
     });
@@ -202,10 +202,10 @@ test('4-5. Invalid password, invalid OTP rejection, and account lockout after 5 
 
 test('6. Forgot Password & Password Reset OTP invalidates prior sessions', async () => {
   await withServer(async (baseUrl, store) => {
-    const oldSession = await loginAs(baseUrl, store, 'MC-MN-202613-0002', 'Manager@2026!');
+    const oldSession = await loginAs(baseUrl, store, 'MC2627110002', 'Manager@2026!');
 
     const forgotRes = await requestJson(baseUrl, 'POST', '/api/auth/forgot-password', {
-      userId: 'MC-MN-202613-0002',
+      userId: 'MC2627110002',
     });
     assert.equal(forgotRes.status, 200);
     const resetOtp = forgotRes.body.data.sandboxOtpPreview;
@@ -229,8 +229,8 @@ test('6. Forgot Password & Password Reset OTP invalidates prior sessions', async
     assert.equal(staleMe.status, 401);
 
     // New password must succeed
-    const newSession = await loginAs(baseUrl, store, 'MC-MN-202613-0002', 'ManagerNew@2026!');
-    assert.equal(newSession.user.userId, 'MC-MN-202613-0002');
+    const newSession = await loginAs(baseUrl, store, 'MC2627110002', 'ManagerNew@2026!');
+    assert.equal(newSession.user.userId, 'MC2627110002');
   });
 });
 
@@ -248,11 +248,11 @@ test('7-8. Automatic User ID generation format (MCYYFFMMSSSS) and concurrent dup
   for (const id of concurrent) {
     assert.match(id, /^MC\d{6}\d{4}$/, `Expected canonical MCYYFFMMSSSS ID, got ${id}`);
   }
-  assert.equal(concurrent[0], 'MC2627110001');
-  assert.equal(concurrent[1], 'MC2627110002');
-  assert.equal(concurrent[2], 'MC2627110003');
-  assert.equal(concurrent[3], 'MC2627110004');
-  assert.equal(concurrent[4], 'MC2627110005');
+  assert.equal(concurrent[0], 'MC2627110006');
+  assert.equal(concurrent[1], 'MC2627110007');
+  assert.equal(concurrent[2], 'MC2627110008');
+  assert.equal(concurrent[3], 'MC2627110009');
+  assert.equal(concurrent[4], 'MC2627110010');
 });
 
 test('9-10. Public registration disabled; Manager onboarding + Admin Approval & Rejection with Audit Log', async () => {
@@ -268,7 +268,7 @@ test('9-10. Public registration disabled; Manager onboarding + Admin Approval & 
     assert.equal(publicAttempt.status, 401);
 
     // Staff cannot initiate registration onboarding either
-    const staff = await loginAs(baseUrl, store, 'MC-ST-202613-0003', 'Staff@2026!');
+    const staff = await loginAs(baseUrl, store, 'MC2627110003', 'Staff@2026!');
     const staffAttempt = await requestJson(
       baseUrl,
       'POST',
@@ -285,7 +285,7 @@ test('9-10. Public registration disabled; Manager onboarding + Admin Approval & 
     assert.equal(staffAttempt.status, 403);
 
     // Mobile OTP flow + authenticated Manager submits onboarding request
-    const manager = await loginAs(baseUrl, store, 'MC-MN-202613-0002', 'Manager@2026!');
+    const manager = await loginAs(baseUrl, store, 'MC2627110002', 'Manager@2026!');
     const sendMobile = await requestJson(baseUrl, 'POST', '/api/auth/mobile-otp/send', {
       mobile: '+8801799887766',
     });
@@ -313,10 +313,10 @@ test('9-10. Public registration disabled; Manager onboarding + Admin Approval & 
       manager.cookies
     );
     assert.equal(regRes.status, 201);
-    assert.equal(regRes.body.data.submittedBy, 'MC-MN-202613-0002');
+    assert.equal(regRes.body.data.submittedBy, 'MC2627110002');
     const createdReqId = regRes.body.data.requestId;
 
-    const admin = await loginAs(baseUrl, store, 'MC-AD-202613-0001', 'Admin@2026!');
+    const admin = await loginAs(baseUrl, store, 'MC2627110001', '8101352105');
 
     // Approve new request -> issues canonical MCYYFFMMSSSS User ID
     const approveRes = await requestJson(
@@ -355,7 +355,7 @@ test('11-12. Permission restrictions, RBAC boundaries, and Unauthorized/CSRF che
     assert.equal(unauth.status, 401);
 
     // Staff cannot access user directory, approvals, or security logs
-    const staff = await loginAs(baseUrl, store, 'MC-ST-202613-0003', 'Staff@2026!');
+    const staff = await loginAs(baseUrl, store, 'MC2627110003', 'Staff@2026!');
     assert.equal(
       (await requestJson(baseUrl, 'GET', '/api/users', undefined, staff.cookies)).status,
       403
@@ -370,7 +370,7 @@ test('11-12. Permission restrictions, RBAC boundaries, and Unauthorized/CSRF che
     );
 
     // Manager cannot create another Manager or modify Admin permissions
-    const manager = await loginAs(baseUrl, store, 'MC-MN-202613-0002', 'Manager@2026!');
+    const manager = await loginAs(baseUrl, store, 'MC2627110002', 'Manager@2026!');
     const mgrCreateMgr = await requestJson(
       baseUrl,
       'POST',
@@ -390,18 +390,18 @@ test('11-12. Permission restrictions, RBAC boundaries, and Unauthorized/CSRF che
     const mgrEditPerms = await requestJson(
       baseUrl,
       'PUT',
-      '/api/users/MC-ST-202613-0003/permissions',
+      '/api/users/MC2627110003/permissions',
       { permissions: { 'transactions.FINANCIAL': true } },
       manager.cookies
     );
     assert.equal(mgrEditPerms.status, 403);
 
     // CSRF rejection when cookie session sent without matching X-CSRF-Token
-    const admin = await loginAs(baseUrl, store, 'MC-AD-202613-0001', 'Admin@2026!');
+    const admin = await loginAs(baseUrl, store, 'MC2627110001', '8101352105');
     const noCsrf = await requestJson(
       baseUrl,
       'PATCH',
-      '/api/users/MC-ST-202613-0003/status',
+      '/api/users/MC2627110003/status',
       { status: 'SUSPENDED' },
       { mun_session: admin.cookies.mun_session }
     );
@@ -412,7 +412,7 @@ test('11-12. Permission restrictions, RBAC boundaries, and Unauthorized/CSRF che
 test('13-14. Session expiration and Logout invalidation', async () => {
   await withServer(
     async (baseUrl, store) => {
-      const staff = await loginAs(baseUrl, store, 'MC-ST-202613-0003', 'Staff@2026!');
+      const staff = await loginAs(baseUrl, store, 'MC2627110003', 'Staff@2026!');
       // Verify active
       const ok = await requestJson(baseUrl, 'GET', '/api/auth/me', undefined, staff.cookies);
       assert.equal(ok.status, 200);
@@ -436,7 +436,7 @@ test('13-14. Session expiration and Logout invalidation', async () => {
   // Separate short-TTL session expiration test
   await withServer(
     async (baseUrl, store) => {
-      const admin = await loginAs(baseUrl, store, 'MC-AD-202613-0001', 'Admin@2026!');
+      const admin = await loginAs(baseUrl, store, 'MC2627110001', '8101352105');
       await new Promise((r) => setTimeout(r, 40));
       const expired = await requestJson(baseUrl, 'GET', '/api/auth/me', undefined, admin.cookies);
       assert.equal(expired.status, 401);

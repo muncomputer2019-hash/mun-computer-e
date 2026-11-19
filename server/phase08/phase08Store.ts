@@ -67,7 +67,7 @@ export class Phase08Store {
     activeEncryptionKeyVersion: 'KEY-V1',
     backupRetentionPolicy: 'PERMANENT_VERSIONED',
     restoreAuthority: 'ADMIN_ONLY',
-    updatedBy: 'MC-AD-202613-0001',
+    updatedBy: 'MC2627110001',
     updatedAt: new Date().toISOString(),
   };
 
@@ -78,7 +78,7 @@ export class Phase08Store {
       status: 'ACTIVE',
       createdAt: '2026-04-01T09:00:00.000Z',
       rotatedAt: null,
-      createdBy: 'MC-AD-202613-0001',
+      createdBy: 'MC2627110001',
     },
   ];
 
@@ -185,7 +185,7 @@ export class Phase08Store {
           'receipts.ADD': true,
           'receipts.PRINT': true,
         },
-        createdBy: 'MC-AD-202613-0001',
+        createdBy: 'MC2627110001',
         createdAt: now,
       },
       {
@@ -202,7 +202,7 @@ export class Phase08Store {
           'report.export.pdf': true,
           'report.export.excel': true,
         },
-        createdBy: 'MC-AD-202613-0001',
+        createdBy: 'MC2627110001',
         createdAt: now,
       }
     );
@@ -225,7 +225,7 @@ export class Phase08Store {
         'report.print': true,
       },
       status: 'ACTIVE',
-      createdBy: 'MC-AD-202613-0001',
+      createdBy: 'MC2627110001',
       createdAt: now,
     });
 
@@ -316,7 +316,7 @@ export class Phase08Store {
     );
 
     this.recordBeforeAfterAudit({
-      userId: 'MC-AD-202613-0001',
+      userId: 'MC2627110001',
       userRole: 'ADMIN',
       actionType: 'PHASE08_SECURITY_INITIALIZED',
       module: 'security_settings',
@@ -1252,7 +1252,7 @@ export class Phase08Store {
           entityId: c.customerId,
           displayLabel: `${c.fullName} (${c.customerId})`,
           deletionReason: 'Soft deleted from Customer CRM',
-          deletedBy: c.deletedBy || 'MC-AD-202613-0001',
+          deletedBy: c.deletedBy || 'MC2627110001',
           deletedAt: c.deletedAt,
           recoveryStatus: 'SOFT_DELETED',
           recoveredBy: null,
@@ -1272,7 +1272,7 @@ export class Phase08Store {
           entityId: s.serviceId,
           displayLabel: `${s.name} (${s.serviceCode})`,
           deletionReason: 'Archived from Services Catalog',
-          deletedBy: 'MC-AD-202613-0001',
+          deletedBy: 'MC2627110001',
           deletedAt: s.deletedAt,
           recoveryStatus: 'SOFT_DELETED',
           recoveredBy: null,

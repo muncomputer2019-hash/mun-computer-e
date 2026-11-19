@@ -18,6 +18,7 @@ import { Modal } from '../../components/Modal';
 import { DataTable, TableColumn } from '../../components/DataTable';
 import { formatCurrency, paginateArray } from '../../services/apiClient';
 import { formatDateIST } from '../../services/formatters';
+import { extractFriendlyErrorMessage } from '../../services/firebase';
 
 interface CustomersCrmPageProps {
   currentUser: UserProfile;
@@ -50,6 +51,8 @@ export const CustomersCrmPage: React.FC<CustomersCrmPageProps> = ({
 
   // Registration modal
   const [createOpen, setCreateOpen] = useState(false);
+  const [savingCustomer, setSavingCustomer] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const [dupOverridePrompt, setDupOverridePrompt] = useState<string | null>(null);
   const [form, setForm] = useState({
     fullName: '',
@@ -121,6 +124,8 @@ export const CustomersCrmPage: React.FC<CustomersCrmPageProps> = ({
   const [mergePrimary, setMergePrimary] = useState('');
   const [mergeDuplicate, setMergeDuplicate] = useState('');
   const [mergeReason, setMergeReason] = useState('');
+  const [merging, setMerging] = useState(false);
+  const [mergeError, setMergeError] = useState<string | null>(null);
 
   const loadCustomers = useCallback(async () => {
     setLoading(true);
@@ -133,7 +138,7 @@ export const CustomersCrmPage: React.FC<CustomersCrmPageProps> = ({
       });
       setCustomers(res.data);
     } catch (err) {
-      onShowToast('error', 'Failed to load Customers', err instanceof Error ? err.message : undefined);
+      onShowToast('error', 'Failed to load Customers', extractFriendlyErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -163,9 +168,20 @@ export const CustomersCrmPage: React.FC<CustomersCrmPageProps> = ({
 
   const handleCreateCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
+    setCreateError(null);
+    if (!form.fullName.trim() || form.fullName.trim().length < 2) {
+      setCreateError('Full name must be at least 2 characters.');
+      return;
+    }
+    if (form.mobile.trim().length < 10) {
+      setCreateError('Please enter a valid 10-digit mobile number.');
+      return;
+    }
+    setSavingCustomer(true);
     try {
       const payload = {
         ...form,
+        fullName: form.fullName.trim(),
         consents: CONSENT_LABELS.map((c) => ({
           category: c.key,
           granted: Boolean(newConsents[c.key]),
@@ -201,11 +217,15 @@ export const CustomersCrmPage: React.FC<CustomersCrmPageProps> = ({
       });
       await loadCustomers();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Validation failed';
+      const msg = extractFriendlyErrorMessage(err, 'Validation failed');
       if (msg.toLowerCase().includes('duplicate')) {
         setDupOverridePrompt(msg);
+      } else {
+        setCreateError(msg);
       }
       onShowToast('error', 'Customer Registration Notice', msg);
+    } finally {
+      setSavingCustomer(false);
     }
   };
 
@@ -301,17 +321,19 @@ export const CustomersCrmPage: React.FC<CustomersCrmPageProps> = ({
       setNoteInput('');
       onShowToast('success', 'CRM Note Recorded');
     } catch (err) {
-      onShowToast('error', 'Failed', err instanceof Error ? err.message : undefined);
+      onShowToast('error', 'Failed', extractFriendlyErrorMessage(err));
     }
   };
 
   const handleMerge = async (e: React.FormEvent) => {
     e.preventDefault();
+    setMergeError(null);
+    setMerging(true);
     try {
       const res = await erpApi.mergeCustomers({
-        primaryCustomerId: mergePrimary,
-        duplicateCustomerId: mergeDuplicate,
-        reason: mergeReason,
+        primaryCustomerId: mergePrimary.trim(),
+        duplicateCustomerId: mergeDuplicate.trim(),
+        reason: mergeReason.trim(),
       });
       onShowToast(
         'success',
@@ -321,7 +343,11 @@ export const CustomersCrmPage: React.FC<CustomersCrmPageProps> = ({
       setMergeOpen(false);
       await loadCustomers();
     } catch (err) {
-      onShowToast('error', 'Merge Failed', err instanceof Error ? err.message : undefined);
+      const msg = extractFriendlyErrorMessage(err, 'Unable to merge customers.');
+      setMergeError(msg);
+      onShowToast('error', 'Merge Failed', msg);
+    } finally {
+      setMerging(false);
     }
   };
 
@@ -410,9 +436,13 @@ export const CustomersCrmPage: React.FC<CustomersCrmPageProps> = ({
                 size="sm"
                 variant="outline"
                 onClick={async () => {
-                  await erpApi.restoreCustomer(r.customerId);
-                  onShowToast('success', 'Customer Restored', r.customerId);
-                  loadCustomers();
+                  try {
+                    await erpApi.restoreCustomer(r.customerId);
+                    onShowToast('success', 'Customer Restored', r.customerId);
+                    loadCustomers();
+                  } catch (err) {
+                    onShowToast('error', 'Restore Failed', extractFriendlyErrorMessage(err));
+                  }
                 }}
                 icon={<RotateCcw className="h-3 w-3" />}
               >
@@ -457,9 +487,11 @@ export const CustomersCrmPage: React.FC<CustomersCrmPageProps> = ({
             Bulk CSV Import
           </Button>
           <Button
+            type="button"
             variant="primary"
             size="sm"
             onClick={() => {
+              setCreateError(null);
               setDupOverridePrompt(null);
               setCreateOpen(true);
             }}
@@ -533,12 +565,20 @@ export const CustomersCrmPage: React.FC<CustomersCrmPageProps> = ({
       {/* Register Customer Modal */}
       <Modal
         isOpen={createOpen}
-        onClose={() => setCreateOpen(false)}
+        onClose={() => {
+          setCreateError(null);
+          setCreateOpen(false);
+        }}
         title="Register New Customer (CRM)"
         description="Generates sequential Customer ID (MCC-YYYY-YY-NNNNNN) with server duplicate detection."
         maxWidthClass="max-w-3xl"
       >
-        <form onSubmit={handleCreateCustomer} className="space-y-4">
+        <form onSubmit={handleCreateCustomer} className="space-y-4" noValidate>
+          {createError && (
+            <div role="alert" className="px-3 py-2 text-xs rounded border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300">
+              {createError}
+            </div>
+          )}
           {dupOverridePrompt && (
             <div className="p-3 border border-amber-400 bg-amber-50 dark:bg-amber-950/30 rounded text-xs space-y-2">
               <div className="font-semibold text-amber-800 dark:text-amber-300">{dupOverridePrompt}</div>
@@ -1006,11 +1046,19 @@ export const CustomersCrmPage: React.FC<CustomersCrmPageProps> = ({
       {/* Admin Customer Merge Modal */}
       <Modal
         isOpen={mergeOpen}
-        onClose={() => setMergeOpen(false)}
+        onClose={() => {
+          setMergeError(null);
+          setMergeOpen(false);
+        }}
         title="Merge Duplicate Customers (Admin Only)"
         description="Transfers all linked applications, documents, payments, deliveries, and refunds to the primary Customer ID."
       >
-        <form onSubmit={handleMerge} className="space-y-3 text-xs">
+        <form onSubmit={handleMerge} className="space-y-3 text-xs" noValidate>
+          {mergeError && (
+            <div role="alert" className="px-3 py-2 rounded border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300">
+              {mergeError}
+            </div>
+          )}
           <div>
             <label className="block font-medium mb-1">Primary Customer ID (Retained)</label>
             <input
@@ -1042,8 +1090,20 @@ export const CustomersCrmPage: React.FC<CustomersCrmPageProps> = ({
             />
           </div>
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" size="sm" variant="outline" onClick={() => setMergeOpen(false)}>Cancel</Button>
-            <Button type="submit" size="sm" variant="primary">Execute Merge</Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setMergeError(null);
+                setMergeOpen(false);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" size="sm" variant="primary" loading={merging}>
+              Execute Merge
+            </Button>
           </div>
         </form>
       </Modal>

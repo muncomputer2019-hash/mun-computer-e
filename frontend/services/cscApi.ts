@@ -19,7 +19,7 @@ import {
   UnitType,
   WholesaleShop,
 } from '../../shared/cscTypes';
-import { apiRequest } from './apiClient';
+import { securityRequest as apiRequest } from './securityApi';
 import { ReportCatalogItem, ReportDataset, ReportFilterInput } from './reportApi';
 
 export interface CscPaymentMethodItem {

@@ -137,10 +137,10 @@ test('UNIT-01: UserIdSequenceService MCYYFFMMSSSS format, zero separators, Apr-M
   assert.equal(resolveFinancialYearCode(2027, 4), '2728');
 
   const seq = new UserIdSequenceService();
-  const id1 = await seq.allocateNext('STAFF', 2026, 11, { actorUserId: 'MC-AD-202613-0001' });
-  const id2 = await seq.allocateNext('MANAGER', 2026, 11, { actorUserId: 'MC-AD-202613-0001' });
-  const id3 = await seq.allocateNext('STAFF', 2027, 2, { actorUserId: 'MC-AD-202613-0001' });
-  const id4 = await seq.allocateNext('STAFF', 2027, 4, { actorUserId: 'MC-AD-202613-0001' });
+  const id1 = await seq.allocateNext('STAFF', 2026, 11, { actorUserId: 'MC2627110001' });
+  const id2 = await seq.allocateNext('MANAGER', 2026, 11, { actorUserId: 'MC2627110001' });
+  const id3 = await seq.allocateNext('STAFF', 2027, 2, { actorUserId: 'MC2627110001' });
+  const id4 = await seq.allocateNext('STAFF', 2027, 4, { actorUserId: 'MC2627110001' });
 
   assert.equal(id1, 'MC2627110001');
   assert.equal(id2, 'MC2627110002');
@@ -170,7 +170,7 @@ test('UNIT-02: Strong 12-char password hashing, verification & all 12 Permission
     assert.ok(ALL_PERMISSION_TYPES.includes(required));
   }
 
-  const secret = 'MasterAdmin@2026!';
+  const secret = 'Master8101352105';
   const storedHash = hashPassword(secret);
   assert.ok(!storedHash.includes(secret), 'Hash must never contain plaintext secret');
   assert.equal(verifyPassword(secret, storedHash), true);
@@ -186,7 +186,7 @@ test('INT-01: Remember Me session strictly capped at 240 minutes (4 hours) and n
     const { cookies, session } = await loginWithOptions(
       baseUrl,
       store,
-      'MC-MN-202613-0002',
+      'MC2627110002',
       'Manager@2026!',
       true
     );
@@ -255,7 +255,7 @@ test('INT-01: Remember Me session strictly capped at 240 minutes (4 hours) and n
 // ===========================================================================
 test('INT-02: 12-char password policy, password reuse protection, and Master Admin immutability', async () => {
   await withServer(async (baseUrl, store) => {
-    const admin = await loginWithOptions(baseUrl, store, 'MC-AD-202613-0001', 'Admin@2026!');
+    const admin = await loginWithOptions(baseUrl, store, 'MC2627110001', '8101352105');
 
     // Weak <12 char password rejected on Admin user creation
     const weakCreate = await requestJson(
@@ -316,7 +316,7 @@ test('INT-02: 12-char password policy, password reuse protection, and Master Adm
     const suspendMaster = await requestJson(
       baseUrl,
       'PATCH',
-      '/api/users/MC-AD-202613-0001/status',
+      '/api/users/MC2627110001/status',
       { status: 'SUSPENDED' },
       admin.cookies
     );
@@ -325,7 +325,7 @@ test('INT-02: 12-char password policy, password reuse protection, and Master Adm
     const deleteMaster = await requestJson(
       baseUrl,
       'DELETE',
-      '/api/users/MC-AD-202613-0001',
+      '/api/users/MC2627110001',
       undefined,
       admin.cookies
     );
@@ -334,7 +334,7 @@ test('INT-02: 12-char password policy, password reuse protection, and Master Adm
     const downgradeMaster = await requestJson(
       baseUrl,
       'PUT',
-      '/api/users/MC-AD-202613-0001/permissions',
+      '/api/users/MC2627110001/permissions',
       { permissions: { 'users.MANAGE': false } },
       admin.cookies
     );
@@ -347,8 +347,8 @@ test('INT-02: 12-char password policy, password reuse protection, and Master Adm
 // ===========================================================================
 test('INT-03: 3-Tier Admin -> Manager -> Staff service RBAC, Default-Deny, and automatic cascade suspension', async () => {
   await withServer(async (baseUrl, store) => {
-    const admin = await loginWithOptions(baseUrl, store, 'MC-AD-202613-0001', 'Admin@2026!');
-    const manager = await loginWithOptions(baseUrl, store, 'MC-MN-202613-0002', 'Manager@2026!');
+    const admin = await loginWithOptions(baseUrl, store, 'MC2627110001', '8101352105');
+    const manager = await loginWithOptions(baseUrl, store, 'MC2627110002', 'Manager@2026!');
 
     // Create a brand new Staff operator with zero service permissions
     const createStaff = await requestJson(
@@ -418,7 +418,7 @@ test('INT-03: 3-Tier Admin -> Manager -> Staff service RBAC, Default-Deny, and a
       'POST',
       '/api/service-permissions/manager-assignments',
       {
-        managerUserId: 'MC-MN-202613-0002',
+        managerUserId: 'MC2627110002',
         serviceId: targetServiceId,
         serviceName: 'e-KYC & Aadhaar Print Assistance',
         departmentCode: 'DEPT-CSC',
@@ -528,15 +528,15 @@ test('INT-03: 3-Tier Admin -> Manager -> Staff service RBAC, Default-Deny, and a
 // ===========================================================================
 test('SEC-01: IDOR blocking, CSRF protection, XSS sanitization, and Email cannot replace User ID', async () => {
   await withServer(async (baseUrl, store) => {
-    const admin = await loginWithOptions(baseUrl, store, 'MC-AD-202613-0001', 'Admin@2026!');
-    const manager = await loginWithOptions(baseUrl, store, 'MC-MN-202613-0002', 'Manager@2026!');
-    const staff = await loginWithOptions(baseUrl, store, 'MC-ST-202613-0003', 'Staff@2026!');
+    const admin = await loginWithOptions(baseUrl, store, 'MC2627110001', '8101352105');
+    const manager = await loginWithOptions(baseUrl, store, 'MC2627110002', 'Manager@2026!');
+    const staff = await loginWithOptions(baseUrl, store, 'MC2627110003', 'Staff@2026!');
 
     // Email login must not replace User ID login system
     const cap = issueTestCaptcha(store);
     const emailLogin = await requestJson(baseUrl, 'POST', '/api/auth/login', {
       userId: 'admin@muncomputer.local',
-      password: 'Admin@2026!',
+      password: '8101352105',
       captchaId: cap.id,
       captchaAnswer: cap.answer,
     });
@@ -546,7 +546,7 @@ test('SEC-01: IDOR blocking, CSRF protection, XSS sanitization, and Email cannot
     const mgrGetAdmin = await requestJson(
       baseUrl,
       'GET',
-      '/api/users/MC-AD-202613-0001',
+      '/api/users/MC2627110001',
       undefined,
       manager.cookies
     );
@@ -555,7 +555,7 @@ test('SEC-01: IDOR blocking, CSRF protection, XSS sanitization, and Email cannot
     const staffGetMgr = await requestJson(
       baseUrl,
       'GET',
-      '/api/users/MC-MN-202613-0002',
+      '/api/users/MC2627110002',
       undefined,
       staff.cookies
     );
@@ -600,7 +600,7 @@ test('PERF-01: 50 parallel atomic MCYYFFMMSSSS User ID allocations & 20 concurre
     const t0 = Date.now();
     const idPromises = Array.from({ length: 50 }, (_, idx) =>
       store.sequenceService.allocateNext(idx % 2 === 0 ? 'STAFF' : 'MANAGER', 2026, 12, {
-        actorUserId: 'MC-AD-202613-0001',
+        actorUserId: 'MC2627110001',
       })
     );
     const allocated = await Promise.all(idPromises);
@@ -609,7 +609,7 @@ test('PERF-01: 50 parallel atomic MCYYFFMMSSSS User ID allocations & 20 concurre
     assert.equal(allocated[49], 'MC2627120050');
 
     const loginPromises = Array.from({ length: 20 }, () =>
-      loginWithOptions(baseUrl, store, 'MC-AD-202613-0001', 'Admin@2026!', true)
+      loginWithOptions(baseUrl, store, 'MC2627110001', '8101352105', true)
     );
     const sessions = await Promise.all(loginPromises);
     assert.equal(sessions.length, 20);

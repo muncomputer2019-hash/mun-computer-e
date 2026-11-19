@@ -2,9 +2,9 @@ import React, { useMemo, useState } from 'react';
 import { Modal } from './Modal';
 import { Button } from './Button';
 import {
-  ApplicationRecord,
   CustomerRecord,
 } from '../modules/types';
+import { extractFriendlyErrorMessage } from '../services/firebase';
 
 export type QuickCreateMode = 'application' | 'customer';
 
@@ -55,6 +55,7 @@ export const QuickCreateModal: React.FC<QuickCreateModalProps> = ({
   const [notes, setNotes] = useState('');
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const selectedCustomerValid = useMemo(
@@ -72,6 +73,7 @@ export const QuickCreateModal: React.FC<QuickCreateModalProps> = ({
     setPaidAmount('0');
     setNotes('');
     setErrors({});
+    setSubmitError(null);
   };
 
   const handleClose = () => {
@@ -120,6 +122,7 @@ export const QuickCreateModal: React.FC<QuickCreateModalProps> = ({
       return;
     }
 
+    setSubmitError(null);
     setSubmitting(true);
     try {
       if (mode === 'customer') {
@@ -143,8 +146,8 @@ export const QuickCreateModal: React.FC<QuickCreateModalProps> = ({
         });
       }
       handleClose();
-    } catch {
-      // Errors surfaced via toast in parent handler; keep modal open for correction
+    } catch (err) {
+      setSubmitError(extractFriendlyErrorMessage(err, 'Unable to save record. Please try again.'));
     } finally {
       setSubmitting(false);
     }
@@ -175,6 +178,11 @@ export const QuickCreateModal: React.FC<QuickCreateModalProps> = ({
       }
     >
       <form id="quick-create-form" onSubmit={handleSubmit} className="space-y-4" noValidate>
+        {submitError && (
+          <div role="alert" className="px-3 py-2 text-xs rounded border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300">
+            {submitError}
+          </div>
+        )}
         {mode === 'customer' ? (
           <>
             <div>

@@ -16,6 +16,7 @@ import {
 } from '../services/phase08Api';
 import { Button } from '../components/Button';
 import { StatusText } from '../components/StatusText';
+import { extractFriendlyErrorMessage } from '../services/firebase';
 
 /* ============================================================================
  * 1. ROLE MANAGEMENT PAGE
@@ -52,7 +53,7 @@ const ROLE_DESCRIPTIONS: Record<
     ],
   },
   STAFF: {
-    prefix: 'MC-ST-YYYY13-XXXX',
+    prefix: 'MCYYFFMMSSSS · Restricted Operational Execution',
     scope: 'Restricted Operational Execution',
     capabilities: [
       'Access Dashboard, Customers, and Applications modules',
@@ -62,7 +63,7 @@ const ROLE_DESCRIPTIONS: Record<
     ],
   },
   EMPLOYEE: {
-    prefix: 'MC-EM-YYYY13-XXXX',
+    prefix: 'MCYYFFMMSSSS · Operational Execution (No User Creation)',
     scope: 'Operational Execution (No User Creation)',
     capabilities: [
       'Access Dashboard and assigned operational tasks',
@@ -71,7 +72,7 @@ const ROLE_DESCRIPTIONS: Record<
     ],
   },
   AUDITOR: {
-    prefix: 'MC-AU-YYYY13-XXXX',
+    prefix: 'MCYYFFMMSSSS · Strict Read-Only Audit & Compliance',
     scope: 'Strict Read-Only Audit & Compliance',
     capabilities: [
       'Read-only access to Financial Engine, GL, Banking, PNB CSP & Reports',
@@ -81,7 +82,7 @@ const ROLE_DESCRIPTIONS: Record<
     ],
   },
   CUSTOMER: {
-    prefix: 'MC-CU-YYYY13-XXXX',
+    prefix: 'MCYYFFMMSSSS · Citizen Self-Service Portal (Isolated)',
     scope: 'Citizen Self-Service Portal (Isolated)',
     capabilities: [
       'View ONLY own CSC orders, PVC card orders, billing & receipts',
@@ -200,11 +201,11 @@ export const PermissionsPage: React.FC<PermissionsPageProps> = ({
 
   // Phase 02 Final Master: 3-Tier Service RBAC State
   const [svcOverview, setSvcOverview] = useState<ServicePermissionsOverviewPayload | null>(null);
-  const [assignMgrId, setAssignMgrId] = useState('MC-MN-202613-0002');
+  const [assignMgrId, setAssignMgrId] = useState('MC2627110002');
   const [assignSvcId, setAssignSvcId] = useState('MCS-2026-27-000001');
   const [assignDept, setAssignDept] = useState('DEPT-CSC');
   const [assignExpiry, setAssignExpiry] = useState('');
-  const [reqStaffId, setReqStaffId] = useState('MC-ST-202613-0003');
+  const [reqStaffId, setReqStaffId] = useState('MC2627110003');
   const [reqSvcId, setReqSvcId] = useState('');
   const [reqReason, setReqReason] = useState('Operational counter intake assignment');
 
@@ -455,9 +456,13 @@ export const PermissionsPage: React.FC<PermissionsPageProps> = ({
                     variant="outline"
                     size="sm"
                     onClick={async () => {
-                      await phase08Api.applyPermissionGroup(grp.groupCode, selectedUserId);
-                      onShowToast('success', 'Permission Group Applied', `${grp.groupName} -> ${selectedUserId}`);
-                      loadData();
+                      try {
+                        await phase08Api.applyPermissionGroup(grp.groupCode, selectedUserId);
+                        onShowToast('success', 'Permission Group Applied', `${grp.groupName} -> ${selectedUserId}`);
+                        loadData();
+                      } catch (err) {
+                        onShowToast('error', 'Failed to Apply Group', extractFriendlyErrorMessage(err));
+                      }
                     }}
                   >
                     Apply Bundle
@@ -503,14 +508,18 @@ export const PermissionsPage: React.FC<PermissionsPageProps> = ({
                 variant="outline"
                 size="sm"
                 onClick={async () => {
-                  await phase08Api.grantTemporaryPermission({
-                    userId: selectedUserId,
-                    permissionKey: tempPermKey,
-                    durationHours: tempHours,
-                    reason: tempReason,
-                  });
-                  onShowToast('success', 'Temporary Access Granted', `${tempPermKey} for ${tempHours}h`);
-                  loadData();
+                  try {
+                    await phase08Api.grantTemporaryPermission({
+                      userId: selectedUserId,
+                      permissionKey: tempPermKey,
+                      durationHours: tempHours,
+                      reason: tempReason,
+                    });
+                    onShowToast('success', 'Temporary Access Granted', `${tempPermKey} for ${tempHours}h`);
+                    loadData();
+                  } catch (err) {
+                    onShowToast('error', 'Grant Failed', extractFriendlyErrorMessage(err));
+                  }
                 }}
               >
                 Grant Temp
@@ -566,8 +575,13 @@ export const PermissionsPage: React.FC<PermissionsPageProps> = ({
                         variant="outline"
                         size="sm"
                         onClick={async () => {
-                          await phase08Api.reviewPermissionRequest(reqItem.requestCode, true, 'Approved by Admin');
-                          loadData();
+                          try {
+                            await phase08Api.reviewPermissionRequest(reqItem.requestCode, true, 'Approved by Admin');
+                            onShowToast('success', 'Request Approved', reqItem.requestCode);
+                            loadData();
+                          } catch (err) {
+                            onShowToast('error', 'Approval Failed', extractFriendlyErrorMessage(err));
+                          }
                         }}
                         icon={<Check className="h-3.5 w-3.5 text-emerald-600" />}
                       >
@@ -577,8 +591,13 @@ export const PermissionsPage: React.FC<PermissionsPageProps> = ({
                         variant="outline"
                         size="sm"
                         onClick={async () => {
-                          await phase08Api.reviewPermissionRequest(reqItem.requestCode, false, 'Rejected by Admin');
-                          loadData();
+                          try {
+                            await phase08Api.reviewPermissionRequest(reqItem.requestCode, false, 'Rejected by Admin');
+                            onShowToast('info', 'Request Rejected', reqItem.requestCode);
+                            loadData();
+                          } catch (err) {
+                            onShowToast('error', 'Rejection Failed', extractFriendlyErrorMessage(err));
+                          }
                         }}
                         icon={<X className="h-3.5 w-3.5 text-red-600" />}
                       >
@@ -771,12 +790,16 @@ export const PermissionsPage: React.FC<PermissionsPageProps> = ({
                           variant="outline"
                           size="sm"
                           onClick={async () => {
-                            await securityRequest(
-                              `/api/service-permissions/manager-assignments/${msa.assignmentCode}/status`,
-                              { method: 'PATCH', body: JSON.stringify({ status: 'SUSPENDED' }) }
-                            );
-                            onShowToast('info', 'Assignment Suspended', 'Dependent Staff permissions cascaded.');
-                            loadData();
+                            try {
+                              await securityRequest(
+                                `/api/service-permissions/manager-assignments/${msa.assignmentCode}/status`,
+                                { method: 'PATCH', body: JSON.stringify({ status: 'SUSPENDED' }) }
+                              );
+                              onShowToast('info', 'Assignment Suspended', 'Dependent Staff permissions cascaded.');
+                              loadData();
+                            } catch (err) {
+                              onShowToast('error', 'Suspend Failed', extractFriendlyErrorMessage(err));
+                            }
                           }}
                         >
                           Suspend
@@ -787,11 +810,15 @@ export const PermissionsPage: React.FC<PermissionsPageProps> = ({
                           variant="outline"
                           size="sm"
                           onClick={async () => {
-                            await securityRequest(
-                              `/api/service-permissions/manager-assignments/${msa.assignmentCode}/status`,
-                              { method: 'PATCH', body: JSON.stringify({ status: 'ACTIVE' }) }
-                            );
-                            loadData();
+                            try {
+                              await securityRequest(
+                                `/api/service-permissions/manager-assignments/${msa.assignmentCode}/status`,
+                                { method: 'PATCH', body: JSON.stringify({ status: 'ACTIVE' }) }
+                              );
+                              loadData();
+                            } catch (err) {
+                              onShowToast('error', 'Activation Failed', extractFriendlyErrorMessage(err));
+                            }
                           }}
                         >
                           Activate
@@ -825,11 +852,15 @@ export const PermissionsPage: React.FC<PermissionsPageProps> = ({
                           variant="outline"
                           size="sm"
                           onClick={async () => {
-                            await securityRequest(
-                              `/api/service-permissions/staff-permissions/${ssp.permissionCode}/status`,
-                              { method: 'PATCH', body: JSON.stringify({ status: 'REVOKED' }) }
-                            );
-                            loadData();
+                            try {
+                              await securityRequest(
+                                `/api/service-permissions/staff-permissions/${ssp.permissionCode}/status`,
+                                { method: 'PATCH', body: JSON.stringify({ status: 'REVOKED' }) }
+                              );
+                              loadData();
+                            } catch (err) {
+                              onShowToast('error', 'Revoke Failed', extractFriendlyErrorMessage(err));
+                            }
                           }}
                         >
                           Revoke

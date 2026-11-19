@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Check,
   Edit3,
@@ -22,6 +22,7 @@ import { erpApi } from '../../services/erpApi';
 import { Button } from '../../components/Button';
 import { Modal } from '../../components/Modal';
 import { formatCurrency } from '../../services/apiClient';
+import { extractFriendlyErrorMessage } from '../../services/firebase';
 
 interface ServicesCatalogPageProps {
   currentUser: UserProfile;
@@ -67,13 +68,18 @@ export const ServicesCatalogPage: React.FC<ServicesCatalogPageProps> = ({
   const [selectedService, setSelectedService] = useState<ErpServiceItem | null>(null);
   const [activeSubTab, setActiveSubTab] = useState<'form' | 'docs' | 'sla' | 'automation' | 'pricing'>('form');
 
-  // Modals
+  // Modals & Form Submit States
   const [newServiceOpen, setNewServiceOpen] = useState(false);
   const [newCatOpen, setNewCatOpen] = useState(false);
-  const [editCatModalOpen, setEditCatModalOpen] = useState(false);
-  const [editingCategory, setEditingCategory] = useState<ServiceCategoryItem | null>(null);
   const [applyModalOpen, setApplyModalOpen] = useState(false);
   const [applyingService, setApplyingService] = useState<ErpServiceItem | null>(null);
+  const [savingCat, setSavingCat] = useState(false);
+  const [savingSrv, setSavingSrv] = useState(false);
+  const [savingPricing, setSavingPricing] = useState(false);
+  const [publishingForm, setPublishingForm] = useState(false);
+  const [catError, setCatError] = useState<string | null>(null);
+  const [srvError, setSrvError] = useState<string | null>(null);
+  const [applyError, setApplyError] = useState<string | null>(null);
 
   // Apply Service form state
   const [applyCustName, setApplyCustName] = useState('');
@@ -88,6 +94,7 @@ export const ServicesCatalogPage: React.FC<ServicesCatalogPageProps> = ({
   // Service Creation Form
   const [srvForm, setSrvForm] = useState({
     name: '',
+    serviceCode: '',
     categoryId: 1,
     customerCharge: 500,
     serviceCost: 150,
@@ -116,6 +123,11 @@ export const ServicesCatalogPage: React.FC<ServicesCatalogPageProps> = ({
   const [editCost, setEditCost] = useState(0);
   const [editStatus, setEditStatus] = useState<ErpServiceItem['status']>('Active');
 
+  const selectedServiceRef = useRef<ErpServiceItem | null>(null);
+  useEffect(() => {
+    selectedServiceRef.current = selectedService;
+  }, [selectedService]);
+
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
@@ -125,22 +137,25 @@ export const ServicesCatalogPage: React.FC<ServicesCatalogPageProps> = ({
       ]);
       setServices(sRes.data);
       setCategories(cRes.data);
-      if (sRes.data.length > 0 && !selectedService) {
-        const first = sRes.data[0];
-        setSelectedService(first);
+      const currentSelected = selectedServiceRef.current;
+      const target = currentSelected
+        ? sRes.data.find((s) => s.serviceId === currentSelected.serviceId) ?? sRes.data[0] ?? null
+        : sRes.data[0] ?? null;
+      if (target) {
+        setSelectedService(target);
         setDraftFields(
-          first.formVersions.find((v) => v.versionNo === first.currentFormVersion)?.fields ?? []
+          target.formVersions.find((v) => v.versionNo === target.currentFormVersion)?.fields ?? []
         );
-        setEditCharge(first.customerCharge);
-        setEditCost(first.serviceCost);
-        setEditStatus(first.status);
+        setEditCharge(target.customerCharge);
+        setEditCost(target.serviceCost);
+        setEditStatus(target.status);
       }
     } catch (err) {
-      onShowToast('error', 'Failed to load Services', err instanceof Error ? err.message : undefined);
+      onShowToast('error', 'Failed to load Services', extractFriendlyErrorMessage(err));
     } finally {
       setLoading(false);
     }
-  }, [onShowToast, selectedService]);
+  }, [onShowToast]);
 
   useEffect(() => {
     loadAll();
@@ -184,18 +199,22 @@ export const ServicesCatalogPage: React.FC<ServicesCatalogPageProps> = ({
 
   const handlePublishFormVersion = async () => {
     if (!selectedService) return;
+    setPublishingForm(true);
     try {
       const res = await erpApi.publishFormVersion(selectedService.serviceId, draftFields);
       onShowToast('success', 'Form Version Published', `v${res.data.currentFormVersion} active (historical applications unaffected)`);
       selectService(res.data);
       setServices((prev) => prev.map((s) => (s.serviceId === res.data.serviceId ? res.data : s)));
     } catch (err) {
-      onShowToast('error', 'Publish Failed', err instanceof Error ? err.message : undefined);
+      onShowToast('error', 'Publish Failed', extractFriendlyErrorMessage(err));
+    } finally {
+      setPublishingForm(false);
     }
   };
 
   const handleSavePricingAndStatus = async () => {
     if (!selectedService) return;
+    setSavingPricing(true);
     try {
       const res = await erpApi.updateService(selectedService.serviceId, {
         customerCharge: editCharge,
@@ -210,55 +229,74 @@ export const ServicesCatalogPage: React.FC<ServicesCatalogPageProps> = ({
       selectService(res.data);
       setServices((prev) => prev.map((s) => (s.serviceId === res.data.serviceId ? res.data : s)));
     } catch (err) {
-      onShowToast('error', 'Update Failed', err instanceof Error ? err.message : undefined);
+      onShowToast('error', 'Update Failed', extractFriendlyErrorMessage(err));
+    } finally {
+      setSavingPricing(false);
     }
   };
 
   const handleCreateService = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSrvError(null);
+    if (!srvForm.name.trim() || srvForm.name.trim().length < 2) {
+      setSrvError('Service name must be at least 2 characters.');
+      return;
+    }
+    setSavingSrv(true);
     try {
       const res = await erpApi.createService({
-        name: srvForm.name,
-        categoryId: srvForm.categoryId,
-        customerCharge: Number(srvForm.customerCharge),
-        serviceCost: Number(srvForm.serviceCost),
-        description: srvForm.description,
-        sla: { processingMode: 'FIXED', expectedDays: Number(srvForm.expectedDays) },
+        name: srvForm.name.trim(),
+        serviceCode: srvForm.serviceCode.trim() || undefined,
+        categoryId: Number(srvForm.categoryId) || categories[0]?.id || 1,
+        customerCharge: Number(srvForm.customerCharge || 0),
+        serviceCost: Number(srvForm.serviceCost || 0),
+        description: srvForm.description.trim(),
+        sla: { processingMode: 'FIXED', expectedDays: Number(srvForm.expectedDays || 3) },
       });
       setNewServiceOpen(false);
-      setSrvForm({ name: '', categoryId: 1, customerCharge: 500, serviceCost: 150, description: '', expectedDays: 3 });
+      setSrvForm({
+        name: '',
+        serviceCode: '',
+        categoryId: categories[0]?.id ?? 1,
+        customerCharge: 500,
+        serviceCost: 150,
+        description: '',
+        expectedDays: 3,
+      });
       onShowToast('success', 'Service Created', `${res.data.serviceId} — ${res.data.name}`);
       await loadAll();
     } catch (err) {
-      onShowToast('error', 'Creation Failed', err instanceof Error ? err.message : undefined);
+      const msg = extractFriendlyErrorMessage(err, 'Unable to create service.');
+      setSrvError(msg);
+      onShowToast('error', 'Creation Failed', msg);
+    } finally {
+      setSavingSrv(false);
     }
   };
 
   const handleCreateCategory = async (e: React.FormEvent) => {
     e.preventDefault();
+    setCatError(null);
+    if (!catForm.name.trim() || catForm.name.trim().length < 2) {
+      setCatError('Category name must be at least 2 characters.');
+      return;
+    }
+    setSavingCat(true);
     try {
-      const res = await erpApi.createServiceCategory(catForm);
+      const res = await erpApi.createServiceCategory({
+        name: catForm.name.trim(),
+        description: catForm.description.trim(),
+      });
       setNewCatOpen(false);
       setCatForm({ name: '', description: '' });
       onShowToast('success', 'Category Created', `Created "${res.data.name}" (${res.data.status})`);
       await loadAll();
     } catch (err) {
-      onShowToast('error', 'Category Error', err instanceof Error ? err.message : undefined);
-    }
-  };
-
-  const handleUpdateCategory = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingCategory) return;
-    try {
-      await erpApi.createServiceCategory({ name: catForm.name, description: catForm.description });
-      setEditCatModalOpen(false);
-      setEditingCategory(null);
-      setCatForm({ name: '', description: '' });
-      onShowToast('success', 'Category Updated', 'Category updated successfully.');
-      await loadAll();
-    } catch (err) {
-      onShowToast('error', 'Update Error', err instanceof Error ? err.message : undefined);
+      const msg = extractFriendlyErrorMessage(err, 'Unable to save category.');
+      setCatError(msg);
+      onShowToast('error', 'Category Error', msg);
+    } finally {
+      setSavingCat(false);
     }
   };
 
@@ -290,14 +328,18 @@ export const ServicesCatalogPage: React.FC<ServicesCatalogPageProps> = ({
     setApplyCustMobile('');
     setApplyVillage('');
     setApplyFormData({});
+    setApplyError(null);
     setApplyModalOpen(true);
   };
 
   const handleExecuteApplyService = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!applyingService) return;
+    setApplyError(null);
     if (!applyCustName.trim() || applyCustMobile.trim().length < 10) {
-      onShowToast('error', 'Validation Failed', 'Customer Name and valid 10-digit mobile number are required.');
+      const msg = 'Customer Name and valid 10-digit mobile number are required.';
+      setApplyError(msg);
+      onShowToast('error', 'Validation Failed', msg);
       return;
     }
 
@@ -328,7 +370,9 @@ export const ServicesCatalogPage: React.FC<ServicesCatalogPageProps> = ({
       setApplyModalOpen(false);
       onStartApplicationForService(applyingService.serviceId);
     } catch (err) {
-      onShowToast('error', 'Application Submission Failed', err instanceof Error ? err.message : undefined);
+      const msg = extractFriendlyErrorMessage(err, 'Application submission failed.');
+      setApplyError(msg);
+      onShowToast('error', 'Application Submission Failed', msg);
     } finally {
       setSubmittingApp(false);
     }
@@ -351,9 +395,11 @@ export const ServicesCatalogPage: React.FC<ServicesCatalogPageProps> = ({
           {isAdmin && (
             <>
               <Button
+                type="button"
                 size="sm"
                 variant="outline"
                 onClick={() => {
+                  setCatError(null);
                   setCatForm({ name: '', description: '' });
                   setNewCatOpen(true);
                 }}
@@ -362,9 +408,17 @@ export const ServicesCatalogPage: React.FC<ServicesCatalogPageProps> = ({
                 Add Category
               </Button>
               <Button
+                type="button"
                 size="sm"
                 variant="primary"
-                onClick={() => setNewServiceOpen(true)}
+                onClick={() => {
+                  setSrvError(null);
+                  setSrvForm((prev) => ({
+                    ...prev,
+                    categoryId: categories[0]?.id ?? prev.categoryId ?? 1,
+                  }));
+                  setNewServiceOpen(true);
+                }}
                 icon={<Plus className="h-3.5 w-3.5" />}
               >
                 Add Service
@@ -625,7 +679,14 @@ export const ServicesCatalogPage: React.FC<ServicesCatalogPageProps> = ({
                       </p>
                     </div>
                     {isAdmin && (
-                      <Button size="sm" variant="primary" onClick={handlePublishFormVersion} icon={<Check className="h-3.5 w-3.5" />}>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="primary"
+                        loading={publishingForm}
+                        onClick={handlePublishFormVersion}
+                        icon={<Check className="h-3.5 w-3.5" />}
+                      >
                         Publish New Version (v{selectedService.currentFormVersion + 1})
                       </Button>
                     )}
@@ -808,7 +869,7 @@ export const ServicesCatalogPage: React.FC<ServicesCatalogPageProps> = ({
                       <option value="Archived">Archived</option>
                     </select>
                   </div>
-                  <Button size="sm" variant="primary" onClick={handleSavePricingAndStatus}>
+                  <Button type="button" size="sm" variant="primary" loading={savingPricing} onClick={handleSavePricingAndStatus}>
                     Save Service Pricing &amp; Status
                   </Button>
                 </div>
@@ -820,7 +881,12 @@ export const ServicesCatalogPage: React.FC<ServicesCatalogPageProps> = ({
 
       {/* Apply Service Workflow Modal */}
       <Modal isOpen={applyModalOpen} onClose={() => setApplyModalOpen(false)} title={`Apply Service: ${applyingService?.name ?? ''}`}>
-        <form onSubmit={handleExecuteApplyService} className="space-y-4 text-xs">
+        <form onSubmit={handleExecuteApplyService} className="space-y-4 text-xs" noValidate>
+          {applyError && (
+            <div role="alert" className="px-3 py-2 rounded border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300">
+              {applyError}
+            </div>
+          )}
           <div className="bg-neutral-50 dark:bg-neutral-950 p-3 rounded border border-neutral-200 dark:border-neutral-800">
             <div className="font-semibold text-neutral-950 dark:text-white">Customer Information</div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
@@ -894,16 +960,43 @@ export const ServicesCatalogPage: React.FC<ServicesCatalogPageProps> = ({
       </Modal>
 
       {/* Add Master Service Modal */}
-      <Modal isOpen={newServiceOpen} onClose={() => setNewServiceOpen(false)} title="Create Master Service">
-        <form onSubmit={handleCreateService} className="space-y-3 text-xs">
-          <div>
-            <label className="block font-medium mb-1">Service Name *</label>
-            <input
-              required
-              value={srvForm.name}
-              onChange={(e) => setSrvForm({ ...srvForm, name: e.target.value })}
-              className="w-full h-9 px-3 border rounded bg-white dark:bg-neutral-900 text-xs"
-            />
+      <Modal
+        isOpen={newServiceOpen}
+        onClose={() => {
+          setSrvError(null);
+          setNewServiceOpen(false);
+        }}
+        title="Create Master Service"
+      >
+        <form onSubmit={handleCreateService} className="space-y-3 text-xs" noValidate>
+          {srvError && (
+            <div role="alert" className="px-3 py-2 rounded border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300">
+              {srvError}
+            </div>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div>
+              <label className="block font-medium mb-1">Service Name *</label>
+              <input
+                required
+                value={srvForm.name}
+                onChange={(e) => {
+                  setSrvError(null);
+                  setSrvForm({ ...srvForm, name: e.target.value });
+                }}
+                placeholder="e.g. Income Certificate"
+                className="w-full h-9 px-3 border rounded bg-white dark:bg-neutral-900 text-xs"
+              />
+            </div>
+            <div>
+              <label className="block font-medium mb-1">Service Code (Optional)</label>
+              <input
+                value={srvForm.serviceCode}
+                onChange={(e) => setSrvForm({ ...srvForm, serviceCode: e.target.value })}
+                placeholder="Auto-generated if blank"
+                className="w-full h-9 px-3 border rounded font-mono bg-white dark:bg-neutral-900 text-xs"
+              />
+            </div>
           </div>
           <div>
             <label className="block font-medium mb-1">Category</label>
@@ -954,21 +1047,48 @@ export const ServicesCatalogPage: React.FC<ServicesCatalogPageProps> = ({
             className="w-full p-2 border rounded bg-white dark:bg-neutral-900 text-xs"
           />
           <div className="flex justify-end gap-2">
-            <Button type="button" size="sm" variant="outline" onClick={() => setNewServiceOpen(false)}>Cancel</Button>
-            <Button type="submit" size="sm" variant="primary">Create Service</Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setSrvError(null);
+                setNewServiceOpen(false);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" size="sm" variant="primary" loading={savingSrv}>
+              Create Service
+            </Button>
           </div>
         </form>
       </Modal>
 
       {/* Add Category Modal */}
-      <Modal isOpen={newCatOpen} onClose={() => setNewCatOpen(false)} title="Add Service Category">
-        <form onSubmit={handleCreateCategory} className="space-y-3 text-xs">
+      <Modal
+        isOpen={newCatOpen}
+        onClose={() => {
+          setCatError(null);
+          setNewCatOpen(false);
+        }}
+        title="Add Service Category"
+      >
+        <form onSubmit={handleCreateCategory} className="space-y-3 text-xs" noValidate>
+          {catError && (
+            <div role="alert" className="px-3 py-2 rounded border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300">
+              {catError}
+            </div>
+          )}
           <div>
             <label className="block font-medium mb-1">Category Name *</label>
             <input
               required
               value={catForm.name}
-              onChange={(e) => setCatForm({ ...catForm, name: e.target.value })}
+              onChange={(e) => {
+                setCatError(null);
+                setCatForm({ ...catForm, name: e.target.value });
+              }}
               placeholder="e.g. Citizen & KYC Services"
               className="w-full h-9 px-3 border rounded bg-white dark:bg-neutral-900 text-xs"
             />
@@ -983,8 +1103,20 @@ export const ServicesCatalogPage: React.FC<ServicesCatalogPageProps> = ({
             />
           </div>
           <div className="flex justify-end gap-2">
-            <Button type="button" size="sm" variant="outline" onClick={() => setNewCatOpen(false)}>Cancel</Button>
-            <Button type="submit" size="sm" variant="primary">Create Category</Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setCatError(null);
+                setNewCatOpen(false);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" size="sm" variant="primary" loading={savingCat}>
+              Create Category
+            </Button>
           </div>
         </form>
       </Modal>

@@ -446,7 +446,15 @@ export const MasterSettingsHub: React.FC<MasterSettingsHubProps> = ({
           />
         );
       case 'security-settings':
-        return <SecuritySettingsPanel policy={overview.securityPolicy} />;
+        return (
+          <SecuritySettingsPanel
+            policy={overview.securityPolicy}
+            currentUserEmail={currentUser.email}
+            currentUserId={currentUser.userId}
+            currentUserRole={currentUser.role}
+            onShowToast={onShowToast}
+          />
+        );
       case 'approval-management':
         return (
           <SettingsProposalsPanel

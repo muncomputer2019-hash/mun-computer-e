@@ -34,7 +34,7 @@ interface SecurityDashboardPageProps {
 
 const APPROVED_CONTROLS = [
   ['1. Login Security', 'OTP + Password + CAPTCHA'],
-  ['2. Two-Factor Auth', 'Email + SMS + WhatsApp OTP'],
+  ['2. Two-Factor Auth', 'SMS OTP + Google Authenticator (TOTP)'],
   ['3. Login Protection', 'Lockout + Device Monitoring'],
   ['4. Role Permissions', 'Module + Page + Action'],
   ['5. Audit Log', 'Before/After + SHA-256 Chain'],

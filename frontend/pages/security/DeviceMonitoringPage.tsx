@@ -194,7 +194,7 @@ export const DeviceMonitoringPage: React.FC<DeviceMonitoringPageProps> = ({
             Device Monitoring &amp; Multi-Channel OTP Logs
           </h2>
           <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
-            Privacy-conscious device trust verification (no invasive canvas/hardware fingerprinting) + Email, SMS &amp; WhatsApp 2FA delivery telemetry
+            Privacy-conscious device trust verification + SMS OTP &amp; Google Authenticator (TOTP) 2FA verification telemetry
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={loadAll} icon={<RefreshCw className="h-3.5 w-3.5" />}>

@@ -335,7 +335,7 @@ export const ApplicationProfileView: React.FC<ApplicationProfileViewProps> = ({
                   <input
                     value={assignStaffId}
                     onChange={(e) => setAssignStaffId(e.target.value)}
-                    placeholder="Staff User ID (e.g. MC-ST-202613-0003)"
+                    placeholder="Staff User ID (e.g. MC2627110003)"
                     className="h-8 px-2 border rounded font-mono bg-white dark:bg-neutral-950"
                   />
                   <input

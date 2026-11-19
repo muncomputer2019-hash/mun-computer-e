@@ -25,6 +25,7 @@ import { UserProfile } from '../../modules/types';
 import { CscPaymentMethodItem, CscReceiptPayload, cscApi } from '../../services/cscApi';
 import { formatDateIST, formatDateTimeIST, formatINR } from '../../services/formatters';
 import { CscReceiptPrintModal } from './CscReceiptPrintModal';
+import { extractFriendlyErrorMessage } from '../../services/firebase';
 
 interface CscOrdersPageProps {
   currentUser: UserProfile;
@@ -63,6 +64,7 @@ export const CscOrdersPage: React.FC<CscOrdersPageProps> = ({
   const [adminRemarks, setAdminRemarks] = useState('');
   const [ekycMethod, setEkycMethod] = useState<CscOrderRecord['ekycMethod']>('Not Applicable');
   const [submitting, setSubmitting] = useState(false);
+  const [orderError, setOrderError] = useState<string | null>(null);
 
   // Order Detail / Status / Payment / Docs
   const [selectedOrder, setSelectedOrder] = useState<CscOrderRecord | null>(null);
@@ -103,7 +105,7 @@ export const CscOrdersPage: React.FC<CscOrdersPageProps> = ({
         if (refreshed) setSelectedOrder(refreshed);
       }
     } catch (err) {
-      onShowToast('error', 'Failed to load CSC Orders', err instanceof Error ? err.message : undefined);
+      onShowToast('error', 'Failed to load CSC Orders', extractFriendlyErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -168,23 +170,32 @@ export const CscOrdersPage: React.FC<CscOrdersPageProps> = ({
 
   const handleCreateOrder = async (e: React.FormEvent) => {
     e.preventDefault();
+    setOrderError(null);
+    if (!custName.trim() || custMobile.trim().length < 10) {
+      const msg = 'Customer Name and a valid 10-digit Mobile Number are required.';
+      setOrderError(msg);
+      onShowToast('error', 'Validation Failed', msg);
+      return;
+    }
     if (cart.length === 0) {
+      const msg = 'Select at least one configured service before creating the order.';
+      setOrderError(msg);
       onShowToast('error', 'Select at least one configured service');
       return;
     }
     setSubmitting(true);
     try {
       const res = await cscApi.createCscOrder({
-        customerName: custName,
-        mobile: custMobile,
-        address: custAddress,
-        district: custDistrict,
-        blockOrMunicipality: custBlock,
+        customerName: custName.trim(),
+        mobile: custMobile.trim(),
+        address: custAddress.trim(),
+        district: custDistrict.trim(),
+        blockOrMunicipality: custBlock.trim(),
         items: cart.map((c) => ({ serviceId: c.service.id, quantity: c.quantity })),
         advancePayment: Number(advancePay || 0),
         paymentMethod: payMethod,
-        paymentReference: payRef,
-        adminRemarks,
+        paymentReference: payRef.trim(),
+        adminRemarks: adminRemarks.trim(),
         ekycMethod,
       });
       onShowToast('success', 'CSC Order Created', `${res.data.orderId} · Total ${formatINR(res.data.totalAmount)}`);
@@ -196,7 +207,9 @@ export const CscOrdersPage: React.FC<CscOrdersPageProps> = ({
       setSelectedOrder(res.data);
       await loadData();
     } catch (err) {
-      onShowToast('error', 'Order Blocked', err instanceof Error ? err.message : undefined);
+      const msg = extractFriendlyErrorMessage(err, 'Unable to create CSC order.');
+      setOrderError(msg);
+      onShowToast('error', 'Order Blocked', msg);
     } finally {
       setSubmitting(false);
     }
@@ -215,7 +228,7 @@ export const CscOrdersPage: React.FC<CscOrdersPageProps> = ({
       setStatusRemarks('');
       await loadData();
     } catch (err) {
-      onShowToast('error', 'Status Update Failed', err instanceof Error ? err.message : undefined);
+      onShowToast('error', 'Status Update Failed', extractFriendlyErrorMessage(err));
     }
   };
 
@@ -237,7 +250,7 @@ export const CscOrdersPage: React.FC<CscOrdersPageProps> = ({
       onShowToast('success', 'Transaction Recorded', `Receipt ${res.data.receipt.receiptNumber}`);
       await loadData();
     } catch (err) {
-      onShowToast('error', 'Payment Error', err instanceof Error ? err.message : undefined);
+      onShowToast('error', 'Payment Error', extractFriendlyErrorMessage(err));
     }
   };
 
@@ -259,7 +272,7 @@ export const CscOrdersPage: React.FC<CscOrdersPageProps> = ({
       setDocBase64('');
       await loadData();
     } catch (err) {
-      onShowToast('error', 'Upload Failed', err instanceof Error ? err.message : undefined);
+      onShowToast('error', 'Upload Failed', extractFriendlyErrorMessage(err));
     }
   };
 
@@ -268,7 +281,7 @@ export const CscOrdersPage: React.FC<CscOrdersPageProps> = ({
       const res = await cscApi.reprintReceipt(receiptNumber);
       setReceiptPreview(res.data);
     } catch (err) {
-      onShowToast('error', 'Receipt Error', err instanceof Error ? err.message : undefined);
+      onShowToast('error', 'Receipt Error', extractFriendlyErrorMessage(err));
     }
   };
 
@@ -295,7 +308,16 @@ export const CscOrdersPage: React.FC<CscOrdersPageProps> = ({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 shrink-0">
-          <Button variant="primary" size="sm" icon={<Plus className="h-3.5 w-3.5" />} onClick={() => setBuilderOpen(true)}>
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
+            icon={<Plus className="h-3.5 w-3.5" />}
+            onClick={() => {
+              setOrderError(null);
+              setBuilderOpen(true);
+            }}
+          >
             New CSC Service Order
           </Button>
           <Button variant="outline" size="sm" onClick={loadData} loading={loading} icon={<RefreshCw className="h-3.5 w-3.5" />}>
@@ -594,8 +616,13 @@ export const CscOrdersPage: React.FC<CscOrdersPageProps> = ({
                       <button
                         type="button"
                         onClick={async () => {
-                          await cscApi.verifyCscDocument(d.docId, 'Verified');
-                          await loadData();
+                          try {
+                            await cscApi.verifyCscDocument(d.docId, 'Verified');
+                            onShowToast('success', 'Document Verified', d.docName);
+                            await loadData();
+                          } catch (err) {
+                            onShowToast('error', 'Verification Failed', extractFriendlyErrorMessage(err));
+                          }
                         }}
                         title="Verify Document"
                         className="px-2 py-1 rounded border border-emerald-300 text-emerald-700 dark:text-emerald-400 text-[11px] cursor-pointer"
@@ -605,8 +632,13 @@ export const CscOrdersPage: React.FC<CscOrdersPageProps> = ({
                       <button
                         type="button"
                         onClick={async () => {
-                          await cscApi.verifyCscDocument(d.docId, 'Re-upload Requested', 'Clear scan required');
-                          await loadData();
+                          try {
+                            await cscApi.verifyCscDocument(d.docId, 'Re-upload Requested', 'Clear scan required');
+                            onShowToast('info', 'Re-upload Requested', d.docName);
+                            await loadData();
+                          } catch (err) {
+                            onShowToast('error', 'Action Failed', extractFriendlyErrorMessage(err));
+                          }
                         }}
                         className="px-2 py-1 rounded border border-amber-300 text-amber-700 dark:text-amber-400 text-[11px] cursor-pointer"
                       >
@@ -653,11 +685,19 @@ export const CscOrdersPage: React.FC<CscOrdersPageProps> = ({
       {/* Multi-Service Order Builder Modal */}
       <Modal
         isOpen={builderOpen}
-        onClose={() => setBuilderOpen(false)}
+        onClose={() => {
+          setOrderError(null);
+          setBuilderOpen(false);
+        }}
         title="Create Multi-Service CSC Order"
         maxWidthClass="max-w-3xl"
       >
-        <form onSubmit={handleCreateOrder} className="space-y-4 text-xs">
+        <form onSubmit={handleCreateOrder} className="space-y-4 text-xs" noValidate>
+          {orderError && (
+            <div role="alert" className="px-3 py-2 rounded border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300">
+              {orderError}
+            </div>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block font-medium mb-1">Customer Full Name *</label>

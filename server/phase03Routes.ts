@@ -731,7 +731,7 @@ export function registerPhase03Routes(
       branchId: 1,
       counterCode: sanitizeText(String(counterCode).toUpperCase()),
       name: sanitizeText(String(name)),
-      assignedUserId: sanitizeText(String(assignedUserId || 'MC-ST-202613-0003')),
+      assignedUserId: sanitizeText(String(assignedUserId || 'MC2627110003')),
       status: 'active' as const,
     };
     p3.counters.push(created);

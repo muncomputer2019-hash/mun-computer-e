@@ -82,7 +82,7 @@ export const BugAndRegressionPage: React.FC<BugAndRegressionPageProps> = ({
   const [bugSteps, setBugSteps] = useState('1. Open module\n2. Submit form');
   const [bugExpected, setBugExpected] = useState('');
   const [bugActual, setBugActual] = useState('');
-  const [bugDeveloper, setBugDeveloper] = useState('MC-AD-202613-0001');
+  const [bugDeveloper, setBugDeveloper] = useState('MC2627110001');
 
   // Lifecycle / Retest Modal
   const [editBug, setEditBug] = useState<QaBugReport | null>(null);

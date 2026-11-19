@@ -1,4 +1,5 @@
 import express, { NextFunction, Request, Response } from 'express';
+import * as OTPAuth from 'otpauth';
 import {
   decryptSensitiveField,
   encryptSensitiveField,
@@ -608,16 +609,18 @@ export function createApp(
         expiresInSeconds: Math.floor(store.otpTtlMs / 1000),
         resendCooldownSeconds: Math.floor(store.otpResendCooldownMs / 1000),
         providerConfigured: configured,
+        totpEnabled: Boolean(user.totpEnabled),
         ...(configured ? {} : { sandboxOtpPreview: otp }),
       },
-      'Credentials verified. Complete OTP verification to start session.'
+      'Credentials verified. Complete OTP or Google Authenticator verification to start session.'
     );
   });
 
   app.post('/api/auth/verify-otp', authRateLimiter, (req, res) => {
-    const { challengeId, otp } = req.body ?? {};
+    const { challengeId, otp, method } = req.body ?? {};
+    const verificationMethod = String(method || 'SMS').toUpperCase() === 'TOTP' ? 'TOTP' : 'SMS';
     if (!challengeId || !otp) {
-      return apiError(res, 'Challenge ID and OTP are required.', 422);
+      return apiError(res, 'Challenge ID and verification code are required.', 422);
     }
 
     const challenge = store.otpChallenges.get(String(challengeId));
@@ -633,19 +636,47 @@ export function createApp(
 
     if (challenge.expiresAt <= Date.now()) {
       if (otpLog) otpLog.outcome = 'EXPIRED';
-      return apiError(res, 'OTP has expired. Request a new code.', 400);
+      return apiError(res, 'Verification challenge has expired. Request a new code.', 400);
     }
 
     if (challenge.attempts >= challenge.maxAttempts) {
       if (otpLog) otpLog.outcome = 'LOCKED';
-      return apiError(res, 'Maximum OTP verification attempts exceeded.', 429);
+      return apiError(res, 'Maximum verification attempts exceeded.', 429);
     }
 
     challenge.attempts += 1;
     if (otpLog) otpLog.attemptsUsed = challenge.attempts;
 
-    const expected = hmacOtp(String(otp).trim(), challenge.id);
-    if (expected !== challenge.otpHash) {
+    let codeValid = false;
+    if (verificationMethod === 'TOTP') {
+      const challengeUser = challenge.userId ? store.findUserByUserId(challenge.userId) : undefined;
+      if (!challengeUser?.totpEnabled || !challengeUser.totpSecretEncrypted) {
+        return apiError(
+          res,
+          'Google Authenticator (TOTP) is not linked to this account. Use SMS OTP or configure TOTP in Security Settings.',
+          400
+        );
+      }
+      try {
+        const base32Secret = decryptSensitiveField(challengeUser.totpSecretEncrypted);
+        const totp = new OTPAuth.TOTP({
+          issuer: 'MUN COMPUTER',
+          label: challengeUser.email || challengeUser.userId,
+          algorithm: 'SHA1',
+          digits: 6,
+          period: 30,
+          secret: OTPAuth.Secret.fromBase32(base32Secret),
+        });
+        codeValid = totp.validate({ token: String(otp).trim(), window: 1 }) !== null;
+      } catch {
+        codeValid = false;
+      }
+    } else {
+      const expected = hmacOtp(String(otp).trim(), challenge.id);
+      codeValid = expected === challenge.otpHash;
+    }
+
+    if (!codeValid) {
       if (otpLog) {
         otpLog.outcome = challenge.attempts >= challenge.maxAttempts ? 'LOCKED' : 'FAILED';
       }
@@ -655,11 +686,11 @@ export function createApp(
         result: 'FAILURE',
         ipAddress: getClientIp(req),
         deviceInfo: getDeviceInfo(req),
-        summary: `OTP verification failed (${challenge.attempts}/${challenge.maxAttempts}).`,
+        summary: `${verificationMethod} verification failed (${challenge.attempts}/${challenge.maxAttempts}).`,
       });
       return apiError(
         res,
-        `Invalid OTP. ${challenge.maxAttempts - challenge.attempts} attempt(s) remaining.`,
+        `Invalid ${verificationMethod === 'TOTP' ? 'Google Authenticator code' : 'OTP'}. ${challenge.maxAttempts - challenge.attempts} attempt(s) remaining.`,
         401
       );
     }
@@ -1063,6 +1094,104 @@ export function createApp(
     return apiSuccess(res, { reset: true }, 'Password has been reset. Please sign in.');
   });
 
+  // Google Authenticator (TOTP) 2FA status & enrollment routes
+  app.get('/api/auth/totp/status', requireAuth, (req: AuthedRequest, res) => {
+    const actor = req.authUser!;
+    return apiSuccess(res, {
+      totpEnabled: Boolean(actor.totpEnabled),
+      userId: actor.userId,
+    });
+  });
+
+  app.post('/api/auth/totp/enable', requireAuth, (req: AuthedRequest, res) => {
+    const actor = req.authUser!;
+    const { secret, code } = req.body ?? {};
+    const cleanSecret = String(secret || '').trim().toUpperCase().replace(/\s+/g, '');
+    const cleanCode = String(code || '').trim();
+    if (!cleanSecret || !/^\d{6}$/.test(cleanCode)) {
+      return apiError(res, 'Valid Base32 setup key and 6-digit authenticator code are required.', 422);
+    }
+
+    try {
+      const totp = new OTPAuth.TOTP({
+        issuer: 'MUN COMPUTER',
+        label: actor.email || actor.userId,
+        algorithm: 'SHA1',
+        digits: 6,
+        period: 30,
+        secret: OTPAuth.Secret.fromBase32(cleanSecret),
+      });
+      const delta = totp.validate({ token: cleanCode, window: 1 });
+      if (delta === null) {
+        return apiError(res, 'Invalid 6-digit Google Authenticator verification code.', 422);
+      }
+
+      actor.totpSecretEncrypted = encryptSensitiveField(cleanSecret);
+      actor.totpEnabled = true;
+      actor.updatedAt = new Date().toISOString();
+
+      store.addSecurityLog({
+        actorUserId: actor.userId,
+        eventType: 'PROFILE_UPDATED',
+        result: 'SUCCESS',
+        ipAddress: getClientIp(req),
+        deviceInfo: getDeviceInfo(req),
+        summary: `Google Authenticator (TOTP 2FA) enabled for ${actor.userId}.`,
+      });
+
+      return apiSuccess(res, { totpEnabled: true }, 'Google Authenticator (TOTP) enabled.');
+    } catch {
+      return apiError(res, 'Invalid Base32 TOTP secret.', 422);
+    }
+  });
+
+  app.post('/api/auth/totp/verify-code', requireAuth, (req: AuthedRequest, res) => {
+    const actor = req.authUser!;
+    const { code } = req.body ?? {};
+    const cleanCode = String(code || '').trim();
+    if (!/^\d{6}$/.test(cleanCode)) {
+      return apiError(res, 'Enter a valid 6-digit Google Authenticator code.', 422);
+    }
+    if (!actor.totpEnabled || !actor.totpSecretEncrypted) {
+      return apiError(res, 'Google Authenticator is not yet linked to this account.', 400);
+    }
+
+    try {
+      const base32Secret = decryptSensitiveField(actor.totpSecretEncrypted);
+      const totp = new OTPAuth.TOTP({
+        issuer: 'MUN COMPUTER',
+        label: actor.email || actor.userId,
+        algorithm: 'SHA1',
+        digits: 6,
+        period: 30,
+        secret: OTPAuth.Secret.fromBase32(base32Secret),
+      });
+      const delta = totp.validate({ token: cleanCode, window: 1 });
+      if (delta === null) {
+        return apiError(res, 'Invalid 6-digit Google Authenticator code.', 401);
+      }
+      return apiSuccess(res, { verified: true }, 'Google Authenticator code verified.');
+    } catch {
+      return apiError(res, 'Unable to verify Google Authenticator code.', 500);
+    }
+  });
+
+  app.post('/api/auth/totp/disable', requireAuth, (req: AuthedRequest, res) => {
+    const actor = req.authUser!;
+    actor.totpSecretEncrypted = undefined;
+    actor.totpEnabled = false;
+    actor.updatedAt = new Date().toISOString();
+    store.addSecurityLog({
+      actorUserId: actor.userId,
+      eventType: 'PROFILE_UPDATED',
+      result: 'SUCCESS',
+      ipAddress: getClientIp(req),
+      deviceInfo: getDeviceInfo(req),
+      summary: `Google Authenticator (TOTP 2FA) disabled for ${actor.userId}.`,
+    });
+    return apiSuccess(res, { totpEnabled: false }, 'Google Authenticator disabled.');
+  });
+
   // Sensitive action re-authentication with session token rotation (never exceeds 240-min cap)
   app.post('/api/auth/reauthenticate', requireAuth, (req: AuthedRequest, res) => {
     const actor = req.authUser!;
@@ -1348,7 +1477,7 @@ export function createApp(
         });
         store.addPhase02Notification({
           triggerType: 'STAFF_REGISTRATION_PENDING',
-          recipientUserId: 'MC-AD-202613-0001',
+          recipientUserId: 'MC2627110001',
           title: `Staff Registration Pending: ${requestRecord.requestId}`,
           message: `Manager ${actor.userId} submitted STAFF onboarding request for ${requestRecord.applicantName}.`,
           severity: 'INFO',
@@ -1923,7 +2052,7 @@ export function createApp(
     });
     store.addPhase02Notification({
       triggerType: 'STAFF_REGISTRATION_PENDING',
-      recipientUserId: 'MC-AD-202613-0001',
+      recipientUserId: 'MC2627110001',
       title: `Staff Onboarding Request: ${record.requestId}`,
       message: `${actor.userId} submitted STAFF onboarding for ${record.applicantName} (${resolvedDept}).`,
       severity: 'INFO',
@@ -2242,7 +2371,12 @@ export function createApp(
       const logs =
         actor.role === 'ADMIN'
           ? store.securityLogs
-          : store.securityLogs.filter((l) => !l.actorUserId.startsWith('MC-AD-'));
+          : store.securityLogs.filter(
+              (l) =>
+                !l.actorUserId.startsWith('MC-AD-') &&
+                l.actorUserId !== 'MC2627110001' &&
+                l.actorUserId !== 'MC262711001'
+            );
       return apiSuccess(res, logs);
     }
   );

@@ -694,7 +694,7 @@ export const BranchCountersPanel: React.FC<{
 }> = ({ branches, counters, isAdmin, onRefresh, onShowToast }) => {
   const [counterCode, setCounterCode] = useState('CTR-03');
   const [name, setName] = useState('CSC & Banking Desk');
-  const [assignedUserId, setAssignedUserId] = useState('MC-ST-202613-0003');
+  const [assignedUserId, setAssignedUserId] = useState('MC2627110003');
 
   const handleAddCounter = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -31,13 +31,20 @@ import {
   ServiceRateItem,
   ThemeMode,
 } from '../modules/types';
+import * as OTPAuth from 'otpauth';
 import {
   OperationType,
   buildPermissionsForRole,
   ensureFirebaseUserProfile,
+  getCurrentUserIdPrefix,
+  getFirebaseTotpStatus,
+  getIstMonthCode,
   handleFirestoreError,
   requireFirebase,
+  resolveFinancialYearCodeIST,
+  saveFirebaseTotpConfig,
   timestampToIso,
+  verifyFirebaseTotpCode,
 } from './firebase';
 import { handleCscFirebaseRoute } from './cscFirebaseHandler';
 
@@ -398,7 +405,9 @@ async function listCollectionScoped(collectionName: string): Promise<Record<stri
     ? query(colRef)
     : collectionName === 'services'
       ? query(colRef, where('status', 'in', ['Active', 'Inactive', 'Temporarily Suspended', 'Archived']))
-      : query(colRef, where('createdByUid', '==', fbUser.uid));
+      : collectionName === 'serviceCategories'
+        ? query(colRef, where('status', 'in', ['active', 'pending_approval', 'archived']))
+        : query(colRef, where('createdByUid', '==', fbUser.uid));
 
   try {
     const snap = await getDocs(q);
@@ -410,105 +419,117 @@ async function listCollectionScoped(collectionName: string): Promise<Record<stri
 
 async function seedDefaultCatalogIfEmpty(uid: string) {
   const { db } = requireFirebase();
-  const cats = await listCollectionScoped('serviceCategories');
-  if (cats.length === 0) {
-    const defaultCats = [
-      { code: 'CAT-ONLINE', name: 'Online Applications', description: 'Passport, Visa, Exam & Portal filings' },
-      { code: 'CAT-CITIZEN', name: 'Citizen & KYC Services', description: 'PAN, Voter ID, Ration & Digital KYC' },
-      { code: 'CAT-TECH', name: 'Computer & IT Services', description: 'OS setup, software, hardware & printing' },
-    ];
-    for (let i = 0; i < defaultCats.length; i += 1) {
-      const c = defaultCats[i];
-      await setDoc(doc(db, 'serviceCategories', c.code), {
-        id: i + 1,
-        code: c.code,
-        name: c.name,
-        description: c.description,
-        status: 'active',
-        proposedBy: 'MC-AD-202613-0001',
-        approvedBy: 'MC-AD-202613-0001',
-        createdByUid: uid,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
+  try {
+    const cats = await listCollectionScoped('serviceCategories');
+    if (cats.length === 0) {
+      const defaultCats = [
+        { code: 'CAT-ONLINE', name: 'Online Applications', description: 'Passport, Visa, Exam & Portal filings' },
+        { code: 'CAT-CITIZEN', name: 'Citizen & KYC Services', description: 'PAN, Voter ID, Ration & Digital KYC' },
+        { code: 'CAT-TECH', name: 'Computer & IT Services', description: 'OS setup, software, hardware & printing' },
+      ];
+      for (let i = 0; i < defaultCats.length; i += 1) {
+        const c = defaultCats[i];
+        const catRef = doc(db, 'serviceCategories', c.code);
+        const existingSnap = await getDoc(catRef);
+        if (!existingSnap.exists()) {
+          await setDoc(catRef, {
+            id: i + 1,
+            code: c.code,
+            name: c.name,
+            description: c.description,
+            status: 'active',
+            proposedBy: 'MC2627110001',
+            approvedBy: 'MC2627110001',
+            createdByUid: uid,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+        }
+      }
     }
-  }
 
-  const svcs = await listCollectionScoped('services');
-  if (svcs.length === 0) {
-    const starterServices = [
-      {
-        id: 1,
-        serviceId: 'SRV-101',
-        serviceCode: 'SRV-101',
-        name: 'Workstation OS & Driver Setup',
-        categoryId: 3,
-        categoryName: 'Computer & IT Services',
-        description: 'Complete operating system installation and driver configuration.',
-        customerCharge: 500,
-        serviceCost: 150,
-        profitAmount: 350,
-      },
-      {
-        id: 2,
-        serviceId: 'SRV-102',
-        serviceCode: 'SRV-102',
-        name: 'Online Passport / Visa Application Filing',
-        categoryId: 1,
-        categoryName: 'Online Applications',
-        description: 'End-to-end portal submission and appointment booking.',
-        customerCharge: 1200,
-        serviceCost: 400,
-        profitAmount: 800,
-      },
-      {
-        id: 3,
-        serviceId: 'SRV-103',
-        serviceCode: 'SRV-103',
-        name: 'PAN / Aadhaar / Digital KYC Service',
-        categoryId: 2,
-        categoryName: 'Citizen & KYC Services',
-        description: 'New PAN application, correction, and digital KYC processing.',
-        customerCharge: 350,
-        serviceCost: 100,
-        profitAmount: 250,
-      },
-    ];
-    for (const s of starterServices) {
-      await setDoc(doc(db, 'services', s.serviceId), {
-        ...s,
-        status: 'Active',
-        availability: 'Available',
-        termsAndConditions: 'Original documents required for counter verification.',
-        sla: {
-          processingMode: 'FIXED',
-          expectedDays: 3,
-          minDays: 1,
-          maxDays: 5,
-          dayType: 'WORKING',
-          excludeHolidays: true,
-          startEvent: 'ON_SUBMIT',
-          pauseOnStatuses: ['Pending Customer'],
-          warningThresholdPct: 75,
-          breachThresholdHours: 24,
+    const svcs = await listCollectionScoped('services');
+    if (svcs.length === 0) {
+      const starterServices = [
+        {
+          id: 1,
+          serviceId: 'SRV-101',
+          serviceCode: 'SRV-101',
+          name: 'Workstation OS & Driver Setup',
+          categoryId: 3,
+          categoryName: 'Computer & IT Services',
+          description: 'Complete operating system installation and driver configuration.',
+          customerCharge: 500,
+          serviceCost: 150,
+          profitAmount: 350,
         },
-        requiredDocuments: [],
-        currentFormVersion: 1,
-        formVersions: [
-          {
-            versionNo: 1,
-            publishedAt: new Date().toISOString(),
-            publishedBy: 'MC-AD-202613-0001',
-            status: 'published',
-            fields: [],
-          },
-        ],
-        automationRules: [],
-        createdByUid: uid,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
+        {
+          id: 2,
+          serviceId: 'SRV-102',
+          serviceCode: 'SRV-102',
+          name: 'Online Passport / Visa Application Filing',
+          categoryId: 1,
+          categoryName: 'Online Applications',
+          description: 'End-to-end portal submission and appointment booking.',
+          customerCharge: 1200,
+          serviceCost: 400,
+          profitAmount: 800,
+        },
+        {
+          id: 3,
+          serviceId: 'SRV-103',
+          serviceCode: 'SRV-103',
+          name: 'PAN / Aadhaar / Digital KYC Service',
+          categoryId: 2,
+          categoryName: 'Citizen & KYC Services',
+          description: 'New PAN application, correction, and digital KYC processing.',
+          customerCharge: 350,
+          serviceCost: 100,
+          profitAmount: 250,
+        },
+      ];
+      for (const s of starterServices) {
+        const srvRef = doc(db, 'services', s.serviceId);
+        const existingSnap = await getDoc(srvRef);
+        if (!existingSnap.exists()) {
+          await setDoc(srvRef, {
+            ...s,
+            status: 'Active',
+            availability: 'Available',
+            termsAndConditions: 'Original documents required for counter verification.',
+            sla: {
+              processingMode: 'FIXED',
+              expectedDays: 3,
+              minDays: 1,
+              maxDays: 5,
+              dayType: 'WORKING',
+              excludeHolidays: true,
+              startEvent: 'ON_SUBMIT',
+              pauseOnStatuses: ['Pending Customer'],
+              warningThresholdPct: 75,
+              breachThresholdHours: 24,
+            },
+            requiredDocuments: [],
+            currentFormVersion: 1,
+            formVersions: [
+              {
+                versionNo: 1,
+                publishedAt: new Date().toISOString(),
+                publishedBy: 'MC2627110001',
+                status: 'published',
+                fields: [],
+              },
+            ],
+            automationRules: [],
+            createdByUid: uid,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+        }
+      }
     }
+  } catch (err) {
+    console.warn('Default catalog seed check skipped:', err);
   }
 }
 
@@ -556,6 +577,77 @@ export async function handleFirebaseApiRequest<T>(
         expiresAt: new Date(Date.now() + 60 * 60_000).toISOString(),
       },
     }) as ApiResponseEnvelope<T>;
+  }
+
+  if (pathname === '/api/auth/totp/status' && method === 'GET') {
+    const status = await getFirebaseTotpStatus(uid);
+    return okEnvelope({
+      totpEnabled: status.totpEnabled,
+      userId: currentProfile.userId,
+    }) as ApiResponseEnvelope<T>;
+  }
+
+  if (pathname === '/api/auth/totp/enable' && method === 'POST') {
+    const secret = str(body.secret, 128).toUpperCase().replace(/\s+/g, '');
+    const code = str(body.code, 12);
+    if (!secret || !/^\d{6}$/.test(code)) {
+      failHttp('Valid Base32 setup key and 6-digit Google Authenticator code are required.', 422);
+    }
+    try {
+      const totp = new OTPAuth.TOTP({
+        issuer: 'MUN COMPUTER',
+        label: currentProfile.email || currentProfile.userId,
+        algorithm: 'SHA1',
+        digits: 6,
+        period: 30,
+        secret: OTPAuth.Secret.fromBase32(secret),
+      });
+      if (totp.validate({ token: code, window: 1 }) === null) {
+        failHttp('Invalid 6-digit Google Authenticator verification code.', 422);
+      }
+    } catch (err) {
+      if ((err as { status?: number }).status) throw err;
+      failHttp('Invalid Base32 TOTP setup key.', 422);
+    }
+
+    await saveFirebaseTotpConfig(secret, true);
+    await writeSecurityLog(
+      'PROFILE_UPDATED',
+      currentProfile.userId,
+      `Google Authenticator (TOTP 2FA) enabled in Firestore for ${currentProfile.userId}.`
+    );
+    return okEnvelope({ totpEnabled: true }, 'Google Authenticator enabled in Firestore.') as ApiResponseEnvelope<T>;
+  }
+
+  if (pathname === '/api/auth/totp/verify-code' && method === 'POST') {
+    const code = str(body.code, 12);
+    if (!/^\d{6}$/.test(code)) {
+      failHttp('Enter a valid 6-digit Google Authenticator code.', 422);
+    }
+    const status = await getFirebaseTotpStatus(uid);
+    if (!status.totpEnabled) {
+      failHttp('Google Authenticator is not yet linked to your account.', 400);
+    }
+    const valid = await verifyFirebaseTotpCode(code, uid);
+    if (!valid) {
+      failHttp('Invalid 6-digit Google Authenticator code.', 401);
+    }
+    await writeSecurityLog(
+      'LOGIN_SUCCESS',
+      currentProfile.userId,
+      `Google Authenticator (TOTP) 6-digit code verified for ${currentProfile.userId}.`
+    );
+    return okEnvelope({ verified: true }, 'Google Authenticator code verified.') as ApiResponseEnvelope<T>;
+  }
+
+  if (pathname === '/api/auth/totp/disable' && method === 'POST') {
+    await saveFirebaseTotpConfig('', false);
+    await writeSecurityLog(
+      'PROFILE_UPDATED',
+      currentProfile.userId,
+      `Google Authenticator (TOTP 2FA) disabled in Firestore for ${currentProfile.userId}.`
+    );
+    return okEnvelope({ totpEnabled: false }, 'Google Authenticator disabled.') as ApiResponseEnvelope<T>;
   }
 
   // =========================================================================
@@ -1316,17 +1408,23 @@ export async function handleFirebaseApiRequest<T>(
   if (pathname === '/api/erp/service-categories' && method === 'POST') {
     const name = str(body.name, 120);
     if (name.length < 2) failHttp('Category name must be at least 2 characters.', 422);
-    const seq = await allocateSequence('CAT');
-    const code = `CAT-${seq}`;
+    const isAdminUser = isBootAdmin || currentProfile.role === 'ADMIN';
+    let seq = await allocateSequence('CAT');
+    let code = `CAT-${seq}`;
     try {
+      while ((await getDoc(doc(db, 'serviceCategories', code))).exists()) {
+        seq = await allocateSequence('CAT');
+        code = `CAT-${seq}`;
+      }
+      const nextStatus = isAdminUser ? 'active' : 'pending_approval';
       await setDoc(doc(db, 'serviceCategories', code), {
         id: seq,
         code,
         name,
         description: str(body.description, 400),
-        status: isBootAdmin ? 'active' : 'pending_approval',
+        status: nextStatus,
         proposedBy: currentProfile.userId,
-        approvedBy: isBootAdmin ? currentProfile.userId : null,
+        approvedBy: isAdminUser ? currentProfile.userId : null,
         createdByUid: uid,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -1336,17 +1434,18 @@ export async function handleFirebaseApiRequest<T>(
         code,
         name,
         description: str(body.description, 400),
-        status: isBootAdmin ? 'active' : 'pending_approval',
+        status: nextStatus,
         proposedBy: currentProfile.userId,
-        approvedBy: isBootAdmin ? currentProfile.userId : null,
+        approvedBy: isAdminUser ? currentProfile.userId : null,
       }) as ApiResponseEnvelope<T>;
     } catch (err) {
+      if ((err as { status?: number }).status) throw err;
       handleFirestoreError(err, OperationType.CREATE, `serviceCategories/${code}`);
     }
   }
 
   if (pathname === '/api/erp/services' && method === 'GET') {
-    if (isBootAdmin) {
+    if (isBootAdmin || currentProfile.role === 'ADMIN') {
       await seedDefaultCatalogIfEmpty(uid);
     }
     const includeDeleted = searchParams.get('includeDeleted') === 'true';
@@ -1359,61 +1458,75 @@ export async function handleFirebaseApiRequest<T>(
 
   if (pathname === '/api/erp/services' && method === 'POST') {
     const name = str(body.name, 160);
-    const serviceCode = str(body.serviceCode, 64);
+    if (name.length < 2) {
+      failHttp('Service name must be at least 2 characters.', 422);
+    }
     const customerCharge = Number(body.customerCharge || 0);
     const serviceCost = Number(body.serviceCost || 0);
-    if (name.length < 2 || serviceCode.length < 2) {
-      failHttp('Service name and service code are required.', 422);
+    if (!Number.isFinite(customerCharge) || customerCharge < 0 || !Number.isFinite(serviceCost) || serviceCost < 0) {
+      failHttp('Customer charge and service cost must be valid numbers >= 0.', 422);
     }
-    const seq = await allocateSequence('SRV');
-    const serviceId = `SRV-${100 + seq}`;
-    const payload = {
-      id: seq,
-      serviceId,
-      serviceCode,
-      name,
-      categoryId: Number(body.categoryId || 1),
-      categoryName: str(body.categoryName || 'General', 120),
-      description: str(body.description, 600),
-      customerCharge,
-      serviceCost,
-      profitAmount: customerCharge - serviceCost,
-      status: 'Active',
-      availability: 'Available',
-      termsAndConditions: str(body.termsAndConditions, 2000),
-      sla: body.sla || {
-        processingMode: 'FIXED',
-        expectedDays: 3,
-        minDays: 1,
-        maxDays: 5,
-        dayType: 'WORKING',
-        excludeHolidays: true,
-        startEvent: 'ON_SUBMIT',
-        pauseOnStatuses: ['Pending Customer'],
-        warningThresholdPct: 75,
-        breachThresholdHours: 24,
-      },
-      requiredDocuments: Array.isArray(body.requiredDocuments) ? body.requiredDocuments.slice(0, 30) : [],
-      currentFormVersion: 1,
-      formVersions: [
-        {
-          versionNo: 1,
-          publishedAt: new Date().toISOString(),
-          publishedBy: currentProfile.userId,
-          status: 'published',
-          fields: Array.isArray(body.fields) ? body.fields : [],
-        },
-      ],
-      automationRules: [],
-      createdByUid: uid,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    };
+    let seq = await allocateSequence('SRV');
+    let serviceId = `SRV-${100 + seq}`;
     try {
+      while ((await getDoc(doc(db, 'services', serviceId))).exists()) {
+        seq = await allocateSequence('SRV');
+        serviceId = `SRV-${100 + seq}`;
+      }
+      const serviceCode = str(body.serviceCode, 64) || serviceId;
+      let categoryName = str(body.categoryName, 120);
+      if (!categoryName && body.categoryId) {
+        const cats = await listCollectionScoped('serviceCategories');
+        const matchedCat = cats.find((c) => Number(c.id) === Number(body.categoryId));
+        if (matchedCat?.name) categoryName = String(matchedCat.name);
+      }
+      const payload = {
+        id: seq,
+        serviceId,
+        serviceCode,
+        name,
+        categoryId: Number(body.categoryId || 1),
+        categoryName: categoryName || 'General',
+        description: str(body.description, 600),
+        customerCharge,
+        serviceCost,
+        profitAmount: customerCharge - serviceCost,
+        status: 'Active',
+        availability: 'Available',
+        termsAndConditions: str(body.termsAndConditions, 2000),
+        sla: body.sla || {
+          processingMode: 'FIXED',
+          expectedDays: 3,
+          minDays: 1,
+          maxDays: 5,
+          dayType: 'WORKING',
+          excludeHolidays: true,
+          startEvent: 'ON_SUBMIT',
+          pauseOnStatuses: ['Pending Customer'],
+          warningThresholdPct: 75,
+          breachThresholdHours: 24,
+        },
+        requiredDocuments: Array.isArray(body.requiredDocuments) ? body.requiredDocuments.slice(0, 30) : [],
+        currentFormVersion: 1,
+        formVersions: [
+          {
+            versionNo: 1,
+            publishedAt: new Date().toISOString(),
+            publishedBy: currentProfile.userId,
+            status: 'published',
+            fields: Array.isArray(body.fields) ? body.fields : [],
+          },
+        ],
+        automationRules: [],
+        createdByUid: uid,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
       await setDoc(doc(db, 'services', serviceId), payload);
       const snap = await getDoc(doc(db, 'services', serviceId));
       return okEnvelope(normalizeServiceDoc(snap.data() as Record<string, unknown>)) as ApiResponseEnvelope<T>;
     } catch (err) {
+      if ((err as { status?: number }).status) throw err;
       handleFirestoreError(err, OperationType.CREATE, `services/${serviceId}`);
     }
   }
@@ -2245,8 +2358,41 @@ export async function handleFirebaseApiRequest<T>(
     return okEnvelope(list) as ApiResponseEnvelope<T>;
   }
 
+  if (pathname === '/api/users/id-prefix-preview' && method === 'GET') {
+    const fy = resolveFinancialYearCodeIST();
+    const mm = getIstMonthCode();
+    return okEnvelope({
+      prefix: getCurrentUserIdPrefix(),
+      financialYearCode: fy,
+      monthCode: mm,
+    }) as ApiResponseEnvelope<T>;
+  }
+
+  if (pathname === '/api/departments' && method === 'GET') {
+    const defaults = [
+      { code: 'DEPT-CSC', name: 'CSC Digital Service Center' },
+      { code: 'DEPT-OPS', name: 'Front Desk & Operations' },
+      { code: 'DEPT-FIN', name: 'Accounts & Finance Engine' },
+      { code: 'DEPT-LEGAL', name: 'Documentation & Compliance' },
+    ];
+    try {
+      const snap = await getDocs(collection(db, 'departments'));
+      if (snap.empty) return okEnvelope(defaults) as ApiResponseEnvelope<T>;
+      const list = snap.docs.map((d) => {
+        const data = d.data();
+        return {
+          code: String(data.departmentCode || d.id),
+          name: String(data.name || d.id),
+        };
+      });
+      return okEnvelope(list) as ApiResponseEnvelope<T>;
+    } catch {
+      return okEnvelope(defaults) as ApiResponseEnvelope<T>;
+    }
+  }
+
   if (pathname === '/api/users' && method === 'GET') {
-    if (!isBootAdmin) {
+    if (!isBootAdmin && currentProfile.role !== 'ADMIN') {
       return okEnvelope([
         {
           ...currentProfile,
@@ -2273,6 +2419,9 @@ export async function handleFirebaseApiRequest<T>(
           .join('')
           .toUpperCase(),
         branch: String(u.branch || 'Main Service Center'),
+        departmentCode: String(u.departmentCode || 'DEPT-CSC'),
+        designation: String(u.designation || ''),
+        isMasterAdmin: Boolean(u.isMasterAdmin),
         status: String(u.status || 'ACTIVE'),
         mobileVerified: Boolean(u.mobileVerified),
         emailVerified: Boolean(u.emailVerified),
@@ -2281,6 +2430,92 @@ export async function handleFirebaseApiRequest<T>(
       };
     });
     return okEnvelope(users) as ApiResponseEnvelope<T>;
+  }
+
+  if (pathname === '/api/users' && method === 'POST') {
+    const isAdminUser = isBootAdmin || currentProfile.role === 'ADMIN';
+    if (!isAdminUser) {
+      failHttp('Only ADMIN can provision user accounts directly in Firebase mode.', 403);
+    }
+    const fullName = str(body.fullName, 120);
+    const mobile = str(body.mobile, 24);
+    const address = str(body.address, 300);
+    const email = str(body.email, 160);
+    const branch = str(body.branch || 'Main Service Center', 120);
+    const designation = str(body.designation, 120);
+    const departmentCode = str(body.departmentCode || 'DEPT-CSC', 40);
+    const joiningDate = str(body.joiningDate || new Date().toISOString().slice(0, 10), 32);
+    const roleRaw = str(body.role || 'STAFF', 24).toUpperCase();
+    const role = (['ADMIN', 'MANAGER', 'STAFF', 'AUDITOR', 'CUSTOMER'].includes(roleRaw) ? roleRaw : 'STAFF') as RoleName;
+    const password = String(body.password || '');
+    const confirmPassword = String(body.confirmPassword || '');
+
+    if (fullName.length < 2) failHttp('Full name must be at least 2 characters.', 422);
+    if (mobile.length < 10) failHttp('Valid 10-digit mobile number is required.', 422);
+    if (address.length < 3) failHttp('Residential or branch address is required.', 422);
+    if (password.length < 8) failHttp('Password must be at least 8 characters.', 422);
+    if (confirmPassword && password !== confirmPassword) failHttp('Passwords do not match.', 422);
+
+    const fyCode = resolveFinancialYearCodeIST();
+    const monthCode = getIstMonthCode();
+    const seq = await allocateSequence(`USER_${fyCode}_${monthCode}`);
+    const issuedUserId = `MC${fyCode}${monthCode}${String(seq).padStart(4, '0')}`;
+    const newUid = `USER_${issuedUserId}`;
+
+    try {
+      await setDoc(doc(db, 'users', newUid), {
+        uid: newUid,
+        userId: issuedUserId,
+        fullName,
+        role,
+        status: 'ACTIVE',
+        branch,
+        designation,
+        departmentCode,
+        joiningDate,
+        isMasterAdmin: false,
+        mobileVerified: false,
+        emailVerified: Boolean(email),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      await setDoc(doc(db, 'users', newUid, 'private', 'info'), {
+        uid: newUid,
+        email,
+        mobile,
+        address,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      await writeSecurityLog(
+        'USER_CREATED',
+        currentProfile.userId,
+        `Provisioned ${role} user ${issuedUserId} (${fullName}) in Firestore.`
+      );
+      return okEnvelope({
+        requiresApproval: false,
+        user: {
+          id: seq,
+          userId: issuedUserId,
+          fullName,
+          email,
+          role,
+          mobile,
+          address,
+          avatarInitials: fullName.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase() || 'MC',
+          branch,
+          designation,
+          departmentCode,
+          joiningDate,
+          status: 'ACTIVE',
+          mobileVerified: false,
+          emailVerified: Boolean(email),
+          permissions: buildPermissionsForRole(role),
+        },
+      }) as ApiResponseEnvelope<T>;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, `users/${newUid}`);
+    }
   }
 
   if (pathname === '/api/security-logs' && method === 'GET') {

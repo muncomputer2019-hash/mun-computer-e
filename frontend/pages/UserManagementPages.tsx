@@ -7,6 +7,7 @@ import { Button } from '../components/Button';
 import { DataTable, TableColumn } from '../components/DataTable';
 import { StatusText } from '../components/StatusText';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { extractFriendlyErrorMessage, getCurrentUserIdPrefix } from '../services/firebase';
 
 /* ============================================================================
  * 1. USER MANAGEMENT DIRECTORY
@@ -40,7 +41,7 @@ export const UsersPage: React.FC<UsersPageProps> = ({
       const res = await securityRequest<UserProfile[]>('/api/users');
       setUsers(res.data);
     } catch (err) {
-      onShowToast('error', 'Failed to load users', err instanceof Error ? err.message : undefined);
+      onShowToast('error', 'Failed to load users', extractFriendlyErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -80,7 +81,7 @@ export const UsersPage: React.FC<UsersPageProps> = ({
       setStatusTarget(null);
       loadUsers();
     } catch (err) {
-      onShowToast('error', 'Action Blocked', err instanceof Error ? err.message : undefined);
+      onShowToast('error', 'Action Blocked', extractFriendlyErrorMessage(err));
       setStatusTarget(null);
     }
   };
@@ -280,7 +281,7 @@ export const AddUserPage: React.FC<AddUserPageProps> = ({
   onShowToast,
 }) => {
   const [role, setRole] = useState<'MANAGER' | 'STAFF' | 'AUDITOR'>('STAFF');
-  const [prefixPreview, setPrefixPreview] = useState('MC262711');
+  const [prefixPreview, setPrefixPreview] = useState(() => getCurrentUserIdPrefix());
   const [fullName, setFullName] = useState('');
   const [mobile, setMobile] = useState('');
   const [email, setEmail] = useState('');
@@ -306,7 +307,7 @@ export const AddUserPage: React.FC<AddUserPageProps> = ({
   useEffect(() => {
     securityRequest<{ prefix: string }>(`/api/users/id-prefix-preview?role=${role}`)
       .then((res) => setPrefixPreview(res.data.prefix))
-      .catch(() => setPrefixPreview('MC262711'));
+      .catch(() => setPrefixPreview(getCurrentUserIdPrefix()));
     securityRequest<Array<{ code: string; name: string }>>('/api/departments')
       .then((res) => {
         if (Array.isArray(res.data) && res.data.length > 0) setDepartments(res.data);
@@ -360,7 +361,7 @@ export const AddUserPage: React.FC<AddUserPageProps> = ({
         onNavigate('users');
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Unable to create user.';
+      const msg = extractFriendlyErrorMessage(err, 'Unable to create user.');
       setFormError(msg);
       onShowToast('error', 'Provisioning Failed', msg);
     } finally {
@@ -600,7 +601,7 @@ export const AddUserPage: React.FC<AddUserPageProps> = ({
         </div>
 
         <div className="flex items-center justify-end gap-2 pt-2">
-          <Button variant="outline" size="sm" onClick={() => onNavigate('users')}>
+          <Button type="button" variant="outline" size="sm" onClick={() => onNavigate('users')}>
             Cancel
           </Button>
           <Button type="submit" variant="primary" size="sm" loading={submitting}>
@@ -639,6 +640,8 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [savingPassword, setSavingPassword] = useState(false);
 
   useEffect(() => {
     setFullName(targetUser.fullName);
@@ -651,6 +654,7 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSavingProfile(true);
     try {
       const res = await securityRequest<UserProfile>(`/api/users/${targetUser.userId}`, {
         method: 'PUT',
@@ -663,12 +667,15 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({
       });
       onShowToast('success', 'Profile Saved', `Updated details for ${targetUser.userId}.`);
     } catch (err) {
-      onShowToast('error', 'Update Failed', err instanceof Error ? err.message : undefined);
+      onShowToast('error', 'Update Failed', extractFriendlyErrorMessage(err));
+    } finally {
+      setSavingProfile(false);
     }
   };
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSavingPassword(true);
     try {
       await securityRequest(`/api/users/${targetUser.userId}/change-password`, {
         method: 'POST',
@@ -679,7 +686,9 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({
       setConfirmPassword('');
       onShowToast('success', 'Password Updated', 'Password change recorded in security logs.');
     } catch (err) {
-      onShowToast('error', 'Password Change Failed', err instanceof Error ? err.message : undefined);
+      onShowToast('error', 'Password Change Failed', extractFriendlyErrorMessage(err));
+    } finally {
+      setSavingPassword(false);
     }
   };
 
@@ -691,7 +700,7 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({
       setRevealedAadhaar(res.data.aadhaarFormatted);
       onShowToast('info', 'Authorized Aadhaar Access', 'Decryption event recorded in Audit Logs.');
     } catch (err) {
-      onShowToast('error', 'Access Denied', err instanceof Error ? err.message : undefined);
+      onShowToast('error', 'Access Denied', extractFriendlyErrorMessage(err));
     }
   };
 
@@ -802,7 +811,7 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({
           )}
 
           <div className="pt-2">
-            <Button type="submit" variant="primary" size="sm">
+            <Button type="submit" variant="primary" size="sm" loading={savingProfile}>
               Save Profile Changes
             </Button>
           </div>
@@ -854,7 +863,7 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({
               />
             </div>
 
-            <Button type="submit" variant="secondary" size="sm">
+            <Button type="submit" variant="secondary" size="sm" loading={savingPassword}>
               Update Password
             </Button>
           </form>

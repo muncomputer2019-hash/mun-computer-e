@@ -132,7 +132,7 @@ test('CSC Parts 1-4: 21 Categories, 550+ Services + 30 PM-JAY initialize with BL
   const baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 
   try {
-    const adminCookies = await loginAs(baseUrl, securityStore, 'MC-AD-202613-0001', 'Admin@2026!');
+    const adminCookies = await loginAs(baseUrl, securityStore, 'MC2627110001', '8101352105');
 
     const catRes = await requestApi(baseUrl, 'GET', '/api/csc/categories', undefined, adminCookies);
     assert.equal(catRes.status, 200);
@@ -250,7 +250,7 @@ test('CSC Part 5: PVC Individual slabs preloaded vs Wholesale slabs start EMPTY 
   const baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 
   try {
-    const adminCookies = await loginAs(baseUrl, securityStore, 'MC-AD-202613-0001', 'Admin@2026!');
+    const adminCookies = await loginAs(baseUrl, securityStore, 'MC2627110001', '8101352105');
 
     const cardRes = await requestApi(baseUrl, 'GET', '/api/csc/pvc/card-types', undefined, adminCookies);
     assert.equal(cardRes.status, 200);
@@ -392,7 +392,7 @@ test('CSC Parts 8-12 & Compliance: 17 statuses, Grievances/RTI, MMSBY/NPCI/Cyber
     assert.equal(ALL_GRIEVANCE_STATUSES.length, 11);
     assert.equal(GRIEVANCE_SERVICE_TYPES.length, 6);
 
-    const adminCookies = await loginAs(baseUrl, securityStore, 'MC-AD-202613-0001', 'Admin@2026!');
+    const adminCookies = await loginAs(baseUrl, securityStore, 'MC2627110001', '8101352105');
 
     // Reject sensitive credential payloads globally on /api/csc/*
     for (const forbiddenKey of ['otp', 'aadhaarOtp', 'upiPin', 'atmPin', 'cvv', 'bankPassword']) {
@@ -555,9 +555,9 @@ test('CSC Parts 7, 13, 14, 15: Operator RBAC, Customer Portal isolation, 24 KPIs
   const baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 
   try {
-    const adminCookies = await loginAs(baseUrl, securityStore, 'MC-AD-202613-0001', 'Admin@2026!');
-    const staffCookies = await loginAs(baseUrl, securityStore, 'MC-ST-202613-0003', 'Staff@2026!');
-    const customerCookies = await loginAs(baseUrl, securityStore, 'MC-CU-202613-0001', 'Customer@2026!');
+    const adminCookies = await loginAs(baseUrl, securityStore, 'MC2627110001', '8101352105');
+    const staffCookies = await loginAs(baseUrl, securityStore, 'MC2627110003', 'Staff@2026!');
+    const customerCookies = await loginAs(baseUrl, securityStore, 'MC2627110005', 'Customer@2026!');
 
     const svcs = (await requestApi(baseUrl, 'GET', '/api/csc/services', undefined, adminCookies)).body.data;
     const svcId = svcs[0].id;
@@ -572,11 +572,11 @@ test('CSC Parts 7, 13, 14, 15: Operator RBAC, Customer Portal isolation, 24 KPIs
     );
     assert.equal(staffDenied.status, 403);
 
-    // Admin grants 'csc.rateEdit' permission to MC-ST-202613-0003 -> allowed (200)
+    // Admin grants 'csc.rateEdit' permission to MC2627110003 -> allowed (200)
     const grantRes = await requestApi(
       baseUrl,
       'PUT',
-      '/api/users/MC-ST-202613-0003/permissions',
+      '/api/users/MC2627110003/permissions',
       { permissions: { 'csc.rateEdit': true } },
       adminCookies
     );
@@ -591,7 +591,7 @@ test('CSC Parts 7, 13, 14, 15: Operator RBAC, Customer Portal isolation, 24 KPIs
     );
     assert.equal(staffAllowed.status, 200);
 
-    // Admin creates an order for linked Customer MC-CU-202613-0001 (CSC-CUST-0001) and another customer
+    // Admin creates an order for linked Customer MC2627110005 (CSC-CUST-0001) and another customer
     const ownOrder = await requestApi(
       baseUrl,
       'POST',

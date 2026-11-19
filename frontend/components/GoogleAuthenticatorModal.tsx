@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, QrCode, KeyRound, CheckCircle2, AlertCircle, X } from 'lucide-react';
+import { ShieldCheck, QrCode, CheckCircle2, AlertCircle, X, Copy, Check } from 'lucide-react';
 import * as OTPAuth from 'otpauth';
 import { Button } from './Button';
+import { securityRequest } from '../services/securityApi';
 
 interface GoogleAuthenticatorModalProps {
   isOpen: boolean;
@@ -25,11 +26,11 @@ export const GoogleAuthenticatorModal: React.FC<GoogleAuthenticatorModalProps> =
   const [verificationCode, setVerificationCode] = useState<string>('');
   const [isVerified, setIsVerified] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
+  const [copied, setCopied] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
-      // Generate a new TOTP secret for Google Authenticator
       const newSecret = new OTPAuth.Secret({ size: 20 });
       const base32Secret = newSecret.base32;
       setSecret(base32Secret);
@@ -46,17 +47,30 @@ export const GoogleAuthenticatorModal: React.FC<GoogleAuthenticatorModalProps> =
       setTotpUri(totp.toString());
       setVerificationCode('');
       setIsVerified(false);
+      setCopied(false);
       setError(null);
     }
   }, [isOpen, userEmail, userId]);
 
   if (!isOpen) return null;
 
-  const handleVerifyAndEnable = (e: React.FormEvent) => {
+  const handleCopySecret = async () => {
+    try {
+      await navigator.clipboard.writeText(secret);
+      setCopied(true);
+      onShowToast('info', 'Setup Key Copied', 'Paste the Base32 key into Google Authenticator.');
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      onShowToast('info', 'Manual Copy', 'Select the Base32 key text to copy it manually.');
+    }
+  };
+
+  const handleVerifyAndEnable = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    if (!verificationCode.trim() || verificationCode.length !== 6) {
+    const cleanCode = verificationCode.trim();
+    if (!/^\d{6}$/.test(cleanCode)) {
       setError('Please enter a valid 6-digit verification code from Google Authenticator.');
       return;
     }
@@ -72,21 +86,32 @@ export const GoogleAuthenticatorModal: React.FC<GoogleAuthenticatorModalProps> =
         secret: OTPAuth.Secret.fromBase32(secret),
       });
 
-      const delta = totp.validate({ token: verificationCode.trim(), window: 1 });
-
-      if (delta !== null) {
-        setIsVerified(true);
-        onShowToast('success', 'Google Authenticator Enabled', 'Two-factor authentication via Google Authenticator is now active.');
-        if (onSuccess) onSuccess();
-        setTimeout(() => {
-          onClose();
-        }, 1500);
-      } else {
+      const delta = totp.validate({ token: cleanCode, window: 1 });
+      if (delta === null) {
         setError('Invalid verification code. Please check your Google Authenticator app and try again.');
         onShowToast('error', 'Verification Failed', 'Invalid 6-digit OTP code.');
+        return;
       }
+
+      await securityRequest<{ totpEnabled: boolean }>('/api/auth/totp/enable', {
+        method: 'POST',
+        body: JSON.stringify({ secret, code: cleanCode }),
+      });
+
+      setIsVerified(true);
+      onShowToast(
+        'success',
+        'Google Authenticator Enabled',
+        'Two-factor authentication via Google Authenticator is now saved and active.'
+      );
+      if (onSuccess) onSuccess();
+      setTimeout(() => {
+        onClose();
+      }, 1400);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Verification error.');
+      const message = err instanceof Error ? err.message : 'Verification error.';
+      setError(message);
+      onShowToast('error', 'Setup Failed', message);
     } finally {
       setLoading(false);
     }
@@ -142,26 +167,41 @@ export const GoogleAuthenticatorModal: React.FC<GoogleAuthenticatorModalProps> =
             <>
               <div className="space-y-2">
                 <span className="text-xs font-medium text-neutral-800 dark:text-neutral-200 block">
-                  Step 1: Scan QR Code or Enter Setup Key
+                  Step 1: Add Setup Key in Google Authenticator
                 </span>
                 <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                  Open Google Authenticator, Authy, or any TOTP app and scan this QR code or enter the setup key manually.
+                  Open Google Authenticator and choose &ldquo;Enter a setup key&rdquo; (Time-based) with account{' '}
+                  <span className="font-mono text-neutral-800 dark:text-neutral-200">
+                    {userEmail || userId}
+                  </span>
+                  .
                 </p>
 
-                {/* QR Code visual representation via standard SVG / canvas or quick link */}
                 <div className="p-4 bg-neutral-50 dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-800 rounded-xl text-center space-y-3">
                   <div className="inline-flex p-3 bg-white dark:bg-neutral-900 rounded-lg shadow-inner border border-neutral-200 dark:border-neutral-800">
-                    {/* QR Code placeholder or svg generator */}
-                    <div className="w-36 h-36 flex flex-col items-center justify-center bg-white text-neutral-900 p-2 font-mono text-[10px] break-all border border-neutral-300">
-                      <QrCode className="h-16 w-16 text-blue-600 mb-1" />
-                      <span>TOTP Auth QR</span>
+                    <div
+                      title={totpUri}
+                      className="w-36 h-24 flex flex-col items-center justify-center bg-white dark:bg-neutral-950 text-neutral-900 dark:text-neutral-100 p-2 font-mono text-[10px] border border-neutral-200 dark:border-neutral-800 rounded"
+                    >
+                      <QrCode className="h-10 w-10 text-blue-600 dark:text-blue-400 mb-1" />
+                      <span className="font-semibold">TOTP SHA1 · 30s</span>
                     </div>
                   </div>
 
-                  <div className="space-y-1">
+                  <div className="space-y-1.5">
                     <span className="text-[11px] text-neutral-500 block">Manual Setup Key (Base32):</span>
-                    <div className="font-mono text-xs font-bold text-blue-800 dark:text-blue-400 bg-white dark:bg-neutral-900 py-1.5 px-3 rounded border border-neutral-200 dark:border-neutral-800 select-all">
-                      {secret}
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 font-mono text-xs font-bold text-blue-800 dark:text-blue-400 bg-white dark:bg-neutral-900 py-1.5 px-3 rounded border border-neutral-200 dark:border-neutral-800 select-all truncate">
+                        {secret}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleCopySecret}
+                        className="inline-flex items-center gap-1 h-8 px-2.5 text-xs font-medium rounded border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-700 dark:text-neutral-200 cursor-pointer shrink-0"
+                      >
+                        {copied ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+                        <span>{copied ? 'Copied' : 'Copy'}</span>
+                      </button>
                     </div>
                   </div>
                 </div>

@@ -7,7 +7,7 @@ export interface SequenceConfig {
 
 const DEFAULT_CONFIG: SequenceConfig = {
   companyPrefix: 'MC',
-  serialPadding: 3,
+  serialPadding: 4,
 };
 
 export interface IdGenerationRecord {

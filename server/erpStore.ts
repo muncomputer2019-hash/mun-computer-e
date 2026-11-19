@@ -486,7 +486,7 @@ export class ErpStore {
             followUpDate: due,
             followUpTime: '11:00',
             reason: `Automation: ${rule.name}`,
-            assignedStaffId: params.app.assignedStaffId || 'MC-ST-202613-0003',
+            assignedStaffId: params.app.assignedStaffId || 'MC2627110003',
             status: 'Pending',
             remarks: 'Auto-created by service automation rule.',
             createdBy: 'SYSTEM_AUTOMATION',
@@ -530,8 +530,8 @@ export class ErpStore {
       name: cat.name,
       description: cat.description,
       status: 'active' as const,
-      proposedBy: 'MC-AD-202613-0001',
-      approvedBy: 'MC-AD-202613-0001',
+      proposedBy: 'MC2627110001',
+      approvedBy: 'MC2627110001',
       createdAt: now,
     }));
 
@@ -541,8 +541,8 @@ export class ErpStore {
       name: 'Ayushman Bharat PM-JAY',
       description: 'Dedicated Ayushman Bharat PM-JAY e-KYC and card issuance module',
       status: 'active',
-      proposedBy: 'MC-AD-202613-0001',
-      approvedBy: 'MC-AD-202613-0001',
+      proposedBy: 'MC2627110001',
+      approvedBy: 'MC2627110001',
       createdAt: now,
     });
 
@@ -601,7 +601,7 @@ export class ErpStore {
             {
               versionNo: 1,
               publishedAt: now,
-              publishedBy: 'MC-AD-202613-0001',
+              publishedBy: 'MC2627110001',
               status: 'published',
               fields: [
                 { fieldKey: 'applicant_name', label: 'Applicant Full Name', fieldType: 'short_text', required: true, displayOrder: 1, enabled: true },
@@ -627,7 +627,7 @@ export class ErpStore {
           ],
           processingTimeHistory: [],
           deletedAt: null,
-          createdBy: 'MC-AD-202613-0001',
+          createdBy: 'MC2627110001',
           createdAt: now,
           updatedAt: now,
         });
@@ -686,7 +686,7 @@ export class ErpStore {
           {
             versionNo: 1,
             publishedAt: now,
-            publishedBy: 'MC-AD-202613-0001',
+            publishedBy: 'MC2627110001',
             status: 'published',
             fields: [
               { fieldKey: 'beneficiary_name', label: 'Beneficiary Full Name', fieldType: 'short_text', required: true, displayOrder: 1, enabled: true },
@@ -698,7 +698,7 @@ export class ErpStore {
         automationRules: [],
         processingTimeHistory: [],
         deletedAt: null,
-        createdBy: 'MC-AD-202613-0001',
+        createdBy: 'MC2627110001',
         createdAt: now,
         updatedAt: now,
       });
@@ -725,7 +725,7 @@ export class ErpStore {
       required: false,
       uniqueScope,
       enabled: true,
-      createdBy: 'MC-AD-202613-0001',
+      createdBy: 'MC2627110001',
       createdAt: now,
     }));
 

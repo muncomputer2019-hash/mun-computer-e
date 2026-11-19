@@ -416,7 +416,7 @@ export class SecurityStore {
         code: 'DEPT-ADMIN',
         name: 'Executive Administration',
         description: 'Master Admin, Security Governance & System Configuration',
-        headUserId: 'MC-AD-202613-0001',
+        headUserId: 'MC2627110001',
         status: 'ACTIVE',
         createdAt: '2026-01-01T09:00:00.000Z',
         updatedAt: now,
@@ -426,7 +426,7 @@ export class SecurityStore {
         code: 'DEPT-CSC',
         name: 'CSC & Citizen Services',
         description: 'Digital Service Center services, e-KYC, Certificates & PVC Printing',
-        headUserId: 'MC-MN-202613-0002',
+        headUserId: 'MC2627110002',
         status: 'ACTIVE',
         createdAt: '2026-01-01T09:00:00.000Z',
         updatedAt: now,
@@ -436,7 +436,7 @@ export class SecurityStore {
         code: 'DEPT-FIN',
         name: 'Finance & CSP Banking',
         description: 'GL Accounting, GST Compliance, Daily Cash & PNB CSP Operations',
-        headUserId: 'MC-AD-202613-0001',
+        headUserId: 'MC2627110001',
         status: 'ACTIVE',
         createdAt: '2026-01-01T09:00:00.000Z',
         updatedAt: now,
@@ -446,7 +446,7 @@ export class SecurityStore {
         code: 'DEPT-LEGAL',
         name: 'Grievance, RTI & Legal',
         description: 'CPGRAMS, RTI Appeals, Tax Filings & Regulatory Notices',
-        headUserId: 'MC-MN-202613-0002',
+        headUserId: 'MC2627110002',
         status: 'ACTIVE',
         createdAt: '2026-01-01T09:00:00.000Z',
         updatedAt: now,
@@ -456,7 +456,7 @@ export class SecurityStore {
         code: 'DEPT-OPS',
         name: 'Front-Desk Operations',
         description: 'Intake Counter, Document Verification & Customer Delivery',
-        headUserId: 'MC-MN-202613-0002',
+        headUserId: 'MC2627110002',
         status: 'ACTIVE',
         createdAt: '2026-01-01T09:00:00.000Z',
         updatedAt: now,
@@ -465,7 +465,7 @@ export class SecurityStore {
 
     const adminUser: ServerUser = {
       id: this.nextUserNumericId++,
-      userId: 'MC262711001',
+      userId: 'MC2627110001',
       isMasterAdmin: true,
       fullName: 'Mamun Reja',
       role: 'ADMIN',
@@ -495,7 +495,7 @@ export class SecurityStore {
 
     const managerUser: ServerUser = {
       id: this.nextUserNumericId++,
-      userId: 'MC-MN-202613-0002',
+      userId: 'MC2627110002',
       isMasterAdmin: false,
       fullName: 'Nadia Sultana',
       role: 'MANAGER',
@@ -513,7 +513,7 @@ export class SecurityStore {
       emailVerified: true,
       failedLoginAttempts: 0,
       lockedUntil: null,
-      createdBy: 'MC-AD-202613-0001',
+      createdBy: 'MC2627110001',
       createdAt: '2026-02-10T10:30:00.000Z',
       updatedAt: now,
       passwordChangedAt: '2026-02-10T10:30:00.000Z',
@@ -522,7 +522,7 @@ export class SecurityStore {
 
     const staffUser: ServerUser = {
       id: this.nextUserNumericId++,
-      userId: 'MC-ST-202613-0003',
+      userId: 'MC2627110003',
       isMasterAdmin: false,
       fullName: 'Rashed Khan',
       role: 'STAFF',
@@ -540,7 +540,7 @@ export class SecurityStore {
       emailVerified: false,
       failedLoginAttempts: 0,
       lockedUntil: null,
-      createdBy: 'MC-MN-202613-0002',
+      createdBy: 'MC2627110002',
       createdAt: '2026-03-05T11:15:00.000Z',
       updatedAt: now,
       passwordChangedAt: '2026-03-05T11:15:00.000Z',
@@ -549,7 +549,7 @@ export class SecurityStore {
 
     const auditorUser: ServerUser = {
       id: this.nextUserNumericId++,
-      userId: 'MC-AU-202613-0001',
+      userId: 'MC2627110004',
       isMasterAdmin: false,
       fullName: 'Subrata Mukherjee (CA Auditor)',
       role: 'AUDITOR',
@@ -566,7 +566,7 @@ export class SecurityStore {
       emailVerified: true,
       failedLoginAttempts: 0,
       lockedUntil: null,
-      createdBy: 'MC-AD-202613-0001',
+      createdBy: 'MC2627110001',
       createdAt: '2026-04-01T10:00:00.000Z',
       updatedAt: now,
       passwordChangedAt: '2026-04-01T10:00:00.000Z',
@@ -575,7 +575,7 @@ export class SecurityStore {
 
     const customerUser: ServerUser = {
       id: this.nextUserNumericId++,
-      userId: 'MC-CU-202613-0001',
+      userId: 'MC2627110005',
       isMasterAdmin: false,
       fullName: 'Ananya Sen (Citizen Portal)',
       role: 'CUSTOMER',
@@ -592,7 +592,7 @@ export class SecurityStore {
       emailVerified: true,
       failedLoginAttempts: 0,
       lockedUntil: null,
-      createdBy: 'MC-AD-202613-0001',
+      createdBy: 'MC2627110001',
       createdAt: '2026-04-05T10:00:00.000Z',
       updatedAt: now,
       passwordChangedAt: '2026-04-05T10:00:00.000Z',
@@ -601,11 +601,11 @@ export class SecurityStore {
 
     this.users.push(adminUser, managerUser, staffUser, auditorUser, customerUser);
 
-    this.sequenceService.seedExisting('MC-AD-202613-0001', 'ADMIN', 2026, 1);
-    this.sequenceService.seedExisting('MC-MN-202613-0002', 'MANAGER', 2026, 2);
-    this.sequenceService.seedExisting('MC-ST-202613-0003', 'STAFF', 2026, 3);
-    this.sequenceService.seedExisting('MC-AU-202613-0001', 'AUDITOR', 2026, 1);
-    this.sequenceService.seedExisting('MC-CU-202613-0001', 'CUSTOMER', 2026, 1);
+    this.sequenceService.seedExisting('MC2627110001', 'ADMIN', 2026, 1, 11);
+    this.sequenceService.seedExisting('MC2627110002', 'MANAGER', 2026, 2, 11);
+    this.sequenceService.seedExisting('MC2627110003', 'STAFF', 2026, 3, 11);
+    this.sequenceService.seedExisting('MC2627110004', 'AUDITOR', 2026, 4, 11);
+    this.sequenceService.seedExisting('MC2627110005', 'CUSTOMER', 2026, 5, 11);
 
     this.registrationRequests.push(
       {
@@ -621,7 +621,7 @@ export class SecurityStore {
         joiningDate: '2026-11-18',
         passwordHash: hashPassword('TempStaff@2026!'),
         mobileVerified: true,
-        submittedBy: 'MC-MN-202613-0002',
+        submittedBy: 'MC2627110002',
         status: 'PENDING',
         createdAt: '2026-11-15T14:20:00.000Z',
         updatedAt: '2026-11-15T14:20:00.000Z',
@@ -639,7 +639,7 @@ export class SecurityStore {
         joiningDate: '2026-11-18',
         passwordHash: hashPassword('TempStaff@2026!'),
         mobileVerified: true,
-        submittedBy: 'MC-MN-202613-0002',
+        submittedBy: 'MC2627110002',
         status: 'PENDING',
         createdAt: '2026-11-16T09:45:00.000Z',
         updatedAt: '2026-11-16T09:45:00.000Z',
@@ -682,12 +682,12 @@ export class SecurityStore {
     }
 
     this.addSecurityLog({
-      actorUserId: 'MC-AD-202613-0001',
+      actorUserId: 'MC2627110001',
       eventType: 'LOGIN_SUCCESS',
       result: 'SUCCESS',
       ipAddress: '127.0.0.1',
       deviceInfo: 'System Initialization',
-      summary: 'Initial Master Admin identity MC-AD-202613-0001 provisioned.',
+      summary: 'Initial Master Admin identity MC2627110001 provisioned.',
     });
   }
 
@@ -700,7 +700,8 @@ export class SecurityStore {
   }
 
   public findUserByUserId(userId: string): ServerUser | undefined {
-    const normalized = userId.trim().toUpperCase();
+    const raw = userId.trim().toUpperCase();
+    const normalized = raw === 'MC262711001' ? 'MC2627110001' : raw;
     return this.users.find((u) => u.userId.toUpperCase() === normalized);
   }
 
@@ -709,7 +710,12 @@ export class SecurityStore {
   }
 
   public isMasterAdminUser(user: ServerUser): boolean {
-    return Boolean(user.isMasterAdmin || user.userId === 'MC-AD-202613-0001');
+    return Boolean(
+      user.isMasterAdmin ||
+        user.userId === 'MC2627110001' ||
+        user.userId === 'MC262711001' ||
+        user.userId === 'MC-AD-202613-0001'
+    );
   }
 
   public getEffectivePermissions(user: ServerUser): Record<string, boolean> {
@@ -1084,7 +1090,7 @@ export class SecurityStore {
     });
     this.addPhase02Notification({
       triggerType: 'STAFF_SERVICE_REQUESTED',
-      recipientUserId: 'MC-AD-202613-0001',
+      recipientUserId: 'MC2627110001',
       title: `Service Approval Required: ${request.requestCode}`,
       message: `Manager ${params.actor.userId} requested ${request.serviceName} access for ${staff.userId}.`,
       severity: 'INFO',
@@ -1278,6 +1284,8 @@ export class SecurityStore {
 
   private isLegacyDemoUser(userId: string): boolean {
     return (
+      userId === 'MC2627110002' ||
+      userId === 'MC2627110003' ||
       userId === 'MC-MN-202613-0002' ||
       userId === 'MC-ST-202613-0003'
     );

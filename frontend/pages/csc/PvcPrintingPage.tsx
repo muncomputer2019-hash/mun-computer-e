@@ -22,6 +22,7 @@ import { UserProfile } from '../../modules/types';
 import { CscPaymentMethodItem, CscReceiptPayload, WholesaleShopProfilePayload, cscApi } from '../../services/cscApi';
 import { formatDateIST, formatINR } from '../../services/formatters';
 import { CscReceiptPrintModal } from './CscReceiptPrintModal';
+import { extractFriendlyErrorMessage } from '../../services/firebase';
 
 interface PvcPrintingPageProps {
   currentUser: UserProfile;
@@ -73,17 +74,22 @@ export const PvcPrintingPage: React.FC<PvcPrintingPageProps> = ({ currentUser, o
   const [shopAltMobile, setShopAltMobile] = useState('');
   const [shopAddress, setShopAddress] = useState('');
   const [shopRemarks, setShopRemarks] = useState('');
+  const [savingShop, setSavingShop] = useState(false);
+  const [shopError, setShopError] = useState<string | null>(null);
   const [shopProfile, setShopProfile] = useState<WholesaleShopProfilePayload | null>(null);
 
   // Card Type Modal
   const [newCardName, setNewCardName] = useState('');
   const [newCardDesc, setNewCardDesc] = useState('');
+  const [savingSlab, setSavingSlab] = useState(false);
 
   // Collect Payment & Receipt Preview
   const [payOrder, setPayOrder] = useState<PvcOrder | null>(null);
   const [payAmount, setPayAmount] = useState('');
   const [payMethod, setPayMethod] = useState('Cash');
   const [payRef, setPayRef] = useState('');
+  const [savingPayment, setSavingPayment] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
   const [receiptPreview, setReceiptPreview] = useState<CscReceiptPayload | null>(null);
 
   const loadAll = useCallback(async () => {
@@ -105,7 +111,7 @@ export const PvcPrintingPage: React.FC<PvcPrintingPageProps> = ({ currentUser, o
         setDraftLines([{ cardTypeId: ctRes.data[0].id, quantity: 1 }]);
       }
     } catch (err) {
-      onShowToast('error', 'Failed to load PVC module', err instanceof Error ? err.message : undefined);
+      onShowToast('error', 'Failed to load PVC module', extractFriendlyErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -175,7 +181,7 @@ export const PvcPrintingPage: React.FC<PvcPrintingPageProps> = ({ currentUser, o
       setOrderRemarks('');
       await loadAll();
     } catch (err) {
-      onShowToast('error', 'Order Failed', err instanceof Error ? err.message : undefined);
+      onShowToast('error', 'Order Failed', extractFriendlyErrorMessage(err));
     } finally {
       setSubmittingOrder(false);
     }
@@ -183,6 +189,7 @@ export const PvcPrintingPage: React.FC<PvcPrintingPageProps> = ({ currentUser, o
 
   const handleSaveSlab = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSavingSlab(true);
     try {
       await cscApi.savePvcSlab({
         mode: slabMode,
@@ -195,7 +202,9 @@ export const PvcPrintingPage: React.FC<PvcPrintingPageProps> = ({ currentUser, o
       setSlabRate('');
       await loadAll();
     } catch (err) {
-      onShowToast('error', 'Slab Validation Error', err instanceof Error ? err.message : undefined);
+      onShowToast('error', 'Slab Validation Error', extractFriendlyErrorMessage(err));
+    } finally {
+      setSavingSlab(false);
     }
   };
 
@@ -205,20 +214,26 @@ export const PvcPrintingPage: React.FC<PvcPrintingPageProps> = ({ currentUser, o
       onShowToast('info', 'Slab Deleted');
       await loadAll();
     } catch (err) {
-      onShowToast('error', 'Delete Failed', err instanceof Error ? err.message : undefined);
+      onShowToast('error', 'Delete Failed', extractFriendlyErrorMessage(err));
     }
   };
 
   const handleCreateShop = async (e: React.FormEvent) => {
     e.preventDefault();
+    setShopError(null);
+    if (!shopName.trim() || !shopOwner.trim() || shopMobile.trim().length < 10) {
+      setShopError('Shop Name, Owner Name, and valid 10-digit Mobile are required.');
+      return;
+    }
+    setSavingShop(true);
     try {
       await cscApi.createWholesaleShop({
-        shopName,
-        ownerName: shopOwner,
-        mobile: shopMobile,
-        altMobile: shopAltMobile,
-        address: shopAddress,
-        remarks: shopRemarks,
+        shopName: shopName.trim(),
+        ownerName: shopOwner.trim(),
+        mobile: shopMobile.trim(),
+        altMobile: shopAltMobile.trim(),
+        address: shopAddress.trim(),
+        remarks: shopRemarks.trim(),
       });
       onShowToast('success', 'Wholesale Shop Registered');
       setShopModalOpen(false);
@@ -230,7 +245,11 @@ export const PvcPrintingPage: React.FC<PvcPrintingPageProps> = ({ currentUser, o
       setShopRemarks('');
       await loadAll();
     } catch (err) {
-      onShowToast('error', 'Shop Registration Error', err instanceof Error ? err.message : undefined);
+      const msg = extractFriendlyErrorMessage(err, 'Unable to register wholesale shop.');
+      setShopError(msg);
+      onShowToast('error', 'Shop Registration Error', msg);
+    } finally {
+      setSavingShop(false);
     }
   };
 
@@ -239,24 +258,35 @@ export const PvcPrintingPage: React.FC<PvcPrintingPageProps> = ({ currentUser, o
       const res = await cscApi.getWholesaleShopProfile(id);
       setShopProfile(res.data);
     } catch (err) {
-      onShowToast('error', 'Failed to load Shop Profile', err instanceof Error ? err.message : undefined);
+      onShowToast('error', 'Failed to load Shop Profile', extractFriendlyErrorMessage(err));
     }
   };
 
   const handleCollectPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!payOrder) return;
+    setPaymentError(null);
+    const amt = Number(payAmount);
+    if (!Number.isFinite(amt) || amt <= 0) {
+      setPaymentError('Enter a valid positive payment amount.');
+      return;
+    }
+    setSavingPayment(true);
     try {
       const res = await cscApi.collectPvcPayment(payOrder.orderId, {
-        amount: Number(payAmount),
+        amount: amt,
         paymentMethod: payMethod,
-        paymentReference: payRef,
+        paymentReference: payRef.trim(),
       });
       onShowToast('success', 'Payment Collected', `Receipt ${res.data.receipt.receiptNumber}`);
       setPayOrder(null);
       await loadAll();
     } catch (err) {
-      onShowToast('error', 'Payment Failed', err instanceof Error ? err.message : undefined);
+      const msg = extractFriendlyErrorMessage(err, 'Unable to collect payment.');
+      setPaymentError(msg);
+      onShowToast('error', 'Payment Failed', msg);
+    } finally {
+      setSavingPayment(false);
     }
   };
 
@@ -265,7 +295,7 @@ export const PvcPrintingPage: React.FC<PvcPrintingPageProps> = ({ currentUser, o
       const res = await cscApi.reprintReceipt(receiptNumber);
       setReceiptPreview(res.data);
     } catch (err) {
-      onShowToast('error', 'Receipt Error', err instanceof Error ? err.message : undefined);
+      onShowToast('error', 'Receipt Error', extractFriendlyErrorMessage(err));
     }
   };
 
@@ -720,7 +750,7 @@ export const PvcPrintingPage: React.FC<PvcPrintingPageProps> = ({ currentUser, o
                     className="w-full h-9 px-2.5 font-mono bg-white dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-700 rounded"
                   />
                 </div>
-                <Button type="submit" variant="primary" size="sm" className="w-full" icon={<Plus className="h-3.5 w-3.5" />}>
+                <Button type="submit" variant="primary" size="sm" loading={savingSlab} className="w-full" icon={<Plus className="h-3.5 w-3.5" />}>
                   Save Rate Slab
                 </Button>
               </form>
@@ -818,7 +848,16 @@ export const PvcPrintingPage: React.FC<PvcPrintingPageProps> = ({ currentUser, o
             <h3 className="text-sm font-semibold flex items-center gap-2">
               <Building2 className="h-4 w-4" /> Registered Wholesale Partner Shops
             </h3>
-            <Button variant="primary" size="sm" icon={<Plus className="h-3.5 w-3.5" />} onClick={() => setShopModalOpen(true)}>
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              icon={<Plus className="h-3.5 w-3.5" />}
+              onClick={() => {
+                setShopError(null);
+                setShopModalOpen(true);
+              }}
+            >
               Add Wholesale Shop
             </Button>
           </div>
@@ -929,8 +968,20 @@ export const PvcPrintingPage: React.FC<PvcPrintingPageProps> = ({ currentUser, o
       )}
 
       {/* Register Shop Modal */}
-      <Modal isOpen={shopModalOpen} onClose={() => setShopModalOpen(false)} title="Register Wholesale Shop">
-        <form onSubmit={handleCreateShop} className="space-y-3 text-xs">
+      <Modal
+        isOpen={shopModalOpen}
+        onClose={() => {
+          setShopError(null);
+          setShopModalOpen(false);
+        }}
+        title="Register Wholesale Shop"
+      >
+        <form onSubmit={handleCreateShop} className="space-y-3 text-xs" noValidate>
+          {shopError && (
+            <div role="alert" className="px-3 py-2 rounded border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300">
+              {shopError}
+            </div>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <input
               type="text"
@@ -980,10 +1031,18 @@ export const PvcPrintingPage: React.FC<PvcPrintingPageProps> = ({ currentUser, o
             className="w-full h-9 px-2.5 bg-white dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-700 rounded"
           />
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={() => setShopModalOpen(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setShopError(null);
+                setShopModalOpen(false);
+              }}
+            >
               Cancel
             </Button>
-            <Button type="submit" variant="primary" size="sm">
+            <Button type="submit" variant="primary" size="sm" loading={savingShop}>
               Register Shop
             </Button>
           </div>
@@ -1051,10 +1110,18 @@ export const PvcPrintingPage: React.FC<PvcPrintingPageProps> = ({ currentUser, o
       {/* Collect PVC Payment Modal */}
       <Modal
         isOpen={Boolean(payOrder)}
-        onClose={() => setPayOrder(null)}
+        onClose={() => {
+          setPaymentError(null);
+          setPayOrder(null);
+        }}
         title={`Collect Due — ${payOrder?.orderId || ''}`}
       >
-        <form onSubmit={handleCollectPayment} className="space-y-3 text-xs">
+        <form onSubmit={handleCollectPayment} className="space-y-3 text-xs" noValidate>
+          {paymentError && (
+            <div role="alert" className="px-3 py-2 rounded border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300">
+              {paymentError}
+            </div>
+          )}
           <div>
             Remaining Due: <strong className="font-mono">{formatINR(payOrder?.remainingDue ?? 0)}</strong>
           </div>
@@ -1086,10 +1153,18 @@ export const PvcPrintingPage: React.FC<PvcPrintingPageProps> = ({ currentUser, o
             className="w-full h-9 px-3 font-mono bg-white dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-700 rounded"
           />
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={() => setPayOrder(null)}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setPaymentError(null);
+                setPayOrder(null);
+              }}
+            >
               Cancel
             </Button>
-            <Button type="submit" variant="primary" size="sm">
+            <Button type="submit" variant="primary" size="sm" loading={savingPayment}>
               Record Payment
             </Button>
           </div>

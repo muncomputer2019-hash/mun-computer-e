@@ -41,7 +41,7 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isBootstrappedAdmin() || (isVerifiedUser() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+      return isBootstrappedAdmin() || (isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
     }
 
     function isActiveTeamMember() {
@@ -62,7 +62,7 @@ service cloud.firestore {
 
     function isProtectedMasterAdmin(data) {
       return ('isMasterAdmin' in data && data.isMasterAdmin == true) ||
-        data.userId == 'MC-AD-202613-0001';
+        data.userId in ['MC2627110001', 'MC262711001', 'MC-AD-202613-0001'];
     }
 
     function isBoundedString(val, minLen, maxLen) {
@@ -101,11 +101,13 @@ service cloud.firestore {
 
     function isValidUserPrivate(data) {
       return data.keys().hasAll(['uid', 'email', 'mobile', 'address', 'createdAt', 'updatedAt']) &&
-      data.keys().hasOnly(['uid', 'email', 'mobile', 'address', 'createdAt', 'updatedAt']) &&
+      data.keys().hasOnly(['uid', 'email', 'mobile', 'address', 'totpEnabled', 'totpSecret', 'createdAt', 'updatedAt']) &&
       isValidId(data.uid) &&
       isBoundedString(data.email, 0, 160) &&
       isBoundedString(data.mobile, 0, 32) &&
       isBoundedString(data.address, 0, 300) &&
+      (!('totpEnabled' in data) || data.totpEnabled is bool) &&
+      (!('totpSecret' in data) || isBoundedString(data.totpSecret, 0, 128)) &&
       data.createdAt is timestamp &&
       data.updatedAt is timestamp;
     }
@@ -446,7 +448,7 @@ service cloud.firestore {
           incoming().uid == existing().uid &&
           incoming().createdAt == existing().createdAt &&
           incoming().updatedAt == request.time &&
-          incoming().diff(existing()).affectedKeys().hasOnly(['email', 'mobile', 'address', 'updatedAt']);
+          incoming().diff(existing()).affectedKeys().hasOnly(['email', 'mobile', 'address', 'totpEnabled', 'totpSecret', 'updatedAt']);
         allow delete: if isValidId(userId) && isValidId(docId) && isAdmin();
       }
     }
@@ -487,19 +489,26 @@ service cloud.firestore {
 
     match /serviceCategories/{categoryId} {
       allow get: if isValidId(categoryId) && isActiveTeamMember();
-      allow list: if isBootstrappedAdmin() || (isVerifiedUser() && existing().createdByUid == request.auth.uid);
+      allow list: if isBootstrappedAdmin() || (isVerifiedUser() && existing().status in ['active', 'pending_approval', 'archived']);
       allow create: if isValidId(categoryId) &&
         isActiveTeamMember() &&
         isValidServiceCategory(incoming()) &&
         incoming().createdByUid == request.auth.uid &&
         incoming().createdAt == request.time &&
-        incoming().updatedAt == request.time;
+        incoming().updatedAt == request.time &&
+        (isAdmin() || incoming().status == 'pending_approval');
       allow update: if isValidId(categoryId) &&
-        isAdmin() &&
         isValidServiceCategory(incoming()) &&
         incoming().createdByUid == existing().createdByUid &&
         incoming().createdAt == existing().createdAt &&
-        incoming().updatedAt == request.time;
+        incoming().updatedAt == request.time &&
+        (
+          isAdmin() ||
+          (isActiveTeamMember() && existing().createdByUid == request.auth.uid &&
+            existing().status == 'pending_approval' &&
+            incoming().status == 'pending_approval' &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['name', 'description', 'updatedAt']))
+        );
       allow delete: if isValidId(categoryId) && isAdmin();
     }
 

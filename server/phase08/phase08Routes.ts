@@ -1207,7 +1207,7 @@ export function registerPhase08Routes(
       title: sanitizeText(String(title)),
       description: sanitizeText(String(description || '')),
       reportedBy: actor.userId,
-      assignedTo: assignedTo ? sanitizeText(String(assignedTo)) : 'MC-AD-202613-0001',
+      assignedTo: assignedTo ? sanitizeText(String(assignedTo)) : 'MC2627110001',
       investigationStatus: 'OPEN',
       resolutionNotes: '',
       createdAt: now,

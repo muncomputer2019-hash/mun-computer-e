@@ -93,7 +93,7 @@ export class QaStore {
         credentialsIsolated: true,
         healthStatus: 'HEALTHY',
         lastCheckedAt: now,
-        updatedBy: 'MC-AD-202613-0001',
+        updatedBy: 'MC2627110001',
       },
       {
         envKey: 'TESTING',
@@ -105,7 +105,7 @@ export class QaStore {
         credentialsIsolated: true,
         healthStatus: 'HEALTHY',
         lastCheckedAt: now,
-        updatedBy: 'MC-AD-202613-0001',
+        updatedBy: 'MC2627110001',
       },
       {
         envKey: 'STAGING',
@@ -117,7 +117,7 @@ export class QaStore {
         credentialsIsolated: true,
         healthStatus: 'HEALTHY',
         lastCheckedAt: now,
-        updatedBy: 'MC-AD-202613-0001',
+        updatedBy: 'MC2627110001',
       },
       {
         envKey: 'PRODUCTION',
@@ -129,7 +129,7 @@ export class QaStore {
         credentialsIsolated: true,
         healthStatus: 'HEALTHY',
         lastCheckedAt: now,
-        updatedBy: 'MC-AD-202613-0001',
+        updatedBy: 'MC2627110001',
       }
     );
 

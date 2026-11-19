@@ -342,50 +342,75 @@ export async function handleCscFirebaseRoute<T>(
 
   if (pathname === '/api/csc/categories' && method === 'POST') {
     if (!isAdmin) errHttp('Only ADMIN can create categories.', 403);
-    const cats = await loadMergedCategories();
-    const id = `CAT-${String(cats.length + 1).padStart(2, '0')}`;
     const name = String(body.name || '').trim();
-    if (name.length < 2) errHttp('Category name is required.', 422);
-    const payload = {
-      id,
-      code: String(body.code || id).toUpperCase().slice(0, 40),
-      name,
-      icon: 'FolderKanban',
-      description: String(body.description || '').slice(0, 500),
-      displayOrder: cats.length + 1,
-      active: true,
-      moduleTag: 'GENERAL',
-      createdByUid: uid,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    };
-    await setDoc(doc(db, 'cscCustomCategories', id), payload);
-    return ok({ ...payload, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }) as ApiResponseEnvelope<T>;
+    if (name.length < 2) errHttp('Category name must be at least 2 characters.', 422);
+    const cats = await loadMergedCategories();
+    const maxNum = cats.reduce((max, c) => {
+      const m = c.id.match(/^CAT-(\d+)$/);
+      return m ? Math.max(max, Number(m[1])) : max;
+    }, cats.length);
+    let nextNum = maxNum + 1;
+    let id = `CAT-${String(nextNum).padStart(2, '0')}`;
+    try {
+      while ((await getDoc(doc(db, 'cscCustomCategories', id))).exists()) {
+        nextNum += 1;
+        id = `CAT-${String(nextNum).padStart(2, '0')}`;
+      }
+      const rawCode = String(body.code || '').trim().toUpperCase().replace(/[^A-Z0-9_-]+/g, '-').slice(0, 40);
+      const code = rawCode.length >= 2 ? rawCode : id;
+      const payload = {
+        id,
+        code,
+        name: name.slice(0, 160),
+        icon: 'FolderKanban',
+        description: String(body.description || '').trim().slice(0, 500),
+        displayOrder: nextNum,
+        active: true,
+        moduleTag: 'GENERAL',
+        createdByUid: uid,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+      await setDoc(doc(db, 'cscCustomCategories', id), payload);
+      return ok({ ...payload, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }) as ApiResponseEnvelope<T>;
+    } catch (err) {
+      if ((err as { status?: number }).status) throw err;
+      handleFirestoreError(err, OperationType.CREATE, `cscCustomCategories/${id}`);
+    }
   }
 
   if (pathname.startsWith('/api/csc/categories/') && method === 'PUT') {
     if (!isAdmin) errHttp('Only ADMIN can update categories.', 403);
-    const catId = pathname.split('/').pop()!;
+    const catId = decodeURIComponent(pathname.split('/').pop() || '');
     const cats = await loadMergedCategories();
     const prev = cats.find((c) => c.id === catId);
     if (!prev) errHttp('Category not found.', 404);
+    const nextName = body.name !== undefined ? String(body.name).trim() : prev.name;
+    if (nextName.length < 2) errHttp('Category name must be at least 2 characters.', 422);
+    const rawCode = body.code !== undefined ? String(body.code).trim().toUpperCase().replace(/[^A-Z0-9_-]+/g, '-').slice(0, 40) : prev.code;
+    const nextCode = rawCode.length >= 2 ? rawCode : prev.code;
     const docRef = doc(db, 'cscCustomCategories', catId);
-    const existingSnap = await getDoc(docRef);
-    const merged = {
-      id: catId,
-      code: prev.code,
-      name: body.name !== undefined ? String(body.name) : prev.name,
-      icon: prev.icon,
-      description: body.description !== undefined ? String(body.description) : prev.description,
-      displayOrder: body.displayOrder !== undefined ? Number(body.displayOrder) : prev.displayOrder,
-      active: body.active !== undefined ? Boolean(body.active) : prev.active,
-      moduleTag: prev.moduleTag,
-      createdByUid: existingSnap.exists() ? String(existingSnap.data().createdByUid) : uid,
-      createdAt: existingSnap.exists() ? existingSnap.data().createdAt : serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    };
-    await setDoc(docRef, merged);
-    return ok({ ...merged, updatedAt: new Date().toISOString() }) as ApiResponseEnvelope<T>;
+    try {
+      const existingSnap = await getDoc(docRef);
+      const merged = {
+        id: catId,
+        code: nextCode,
+        name: nextName.slice(0, 160),
+        icon: prev.icon || 'FolderKanban',
+        description: body.description !== undefined ? String(body.description).trim().slice(0, 500) : prev.description,
+        displayOrder: body.displayOrder !== undefined ? Number(body.displayOrder) : prev.displayOrder,
+        active: body.active !== undefined ? Boolean(body.active) : prev.active,
+        moduleTag: prev.moduleTag || 'GENERAL',
+        createdByUid: existingSnap.exists() ? String(existingSnap.data().createdByUid) : uid,
+        createdAt: existingSnap.exists() ? existingSnap.data().createdAt : serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+      await setDoc(docRef, merged);
+      return ok({ ...merged, updatedAt: new Date().toISOString() }) as ApiResponseEnvelope<T>;
+    } catch (err) {
+      if ((err as { status?: number }).status) throw err;
+      handleFirestoreError(err, OperationType.UPDATE, `cscCustomCategories/${catId}`);
+    }
   }
 
   if (pathname === '/api/csc/services' && method === 'GET') {
@@ -411,42 +436,142 @@ export async function handleCscFirebaseRoute<T>(
 
   if (pathname === '/api/csc/services' && method === 'POST') {
     if (!isAdmin) errHttp('Only ADMIN can create services.', 403);
-    const serviceId = `CSRV-C${Date.now().toString().slice(-6)}`;
+    const name = String(body.name || '').trim();
+    if (name.length < 2) errHttp('Service name must be at least 2 characters.', 422);
     const categories = await loadMergedCategories();
     const cat = categories.find((c) => c.id === String(body.categoryId || ''));
-    if (!cat) errHttp('Category not found.', 404);
-    const payload = {
-      serviceId,
-      code: `${cat.code}-${serviceId.slice(-4)}`,
-      categoryId: cat.id,
-      categoryName: cat.name,
-      subGroup: body.subGroup ? String(body.subGroup) : '',
-      name: String(body.name || '').trim(),
-      description: String(body.description || `${cat.name} — ${body.name}`),
-      serviceCharge: null,
-      govtFee: null,
-      totalAmount: null,
-      unitType: null,
-      rateConfigured: false,
-      effectiveDate: null,
-      requiredDocuments: Array.isArray(body.requiredDocuments)
-        ? body.requiredDocuments.map(String)
-        : ['Applicant ID Proof'],
-      availability: 'Available',
-      active: true,
-      moduleTag: cat.moduleTag,
-      updatedBy: currentProfile.userId,
-      updatedByUid: uid,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    };
-    await setDoc(doc(db, 'cscServiceOverrides', serviceId), payload);
-    return ok({ ...payload, id: serviceId, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }) as ApiResponseEnvelope<T>;
+    if (!cat) errHttp('Selected category not found.', 404);
+    let suffix = Number(Date.now().toString().slice(-6));
+    let serviceId = `CSRV-C${suffix}`;
+    try {
+      while ((await getDoc(doc(db, 'cscServiceOverrides', serviceId))).exists()) {
+        suffix += 1;
+        serviceId = `CSRV-C${suffix}`;
+      }
+      const payload = {
+        serviceId,
+        code: `${cat.code}-${String(serviceId).slice(-4)}`,
+        categoryId: cat.id,
+        categoryName: cat.name,
+        subGroup: body.subGroup ? String(body.subGroup).trim().slice(0, 120) : '',
+        name: name.slice(0, 200),
+        description: String(body.description || `${cat.name} — ${name}`).trim().slice(0, 500),
+        serviceCharge: null,
+        govtFee: null,
+        totalAmount: null,
+        unitType: null,
+        rateConfigured: false,
+        effectiveDate: null,
+        requiredDocuments: Array.isArray(body.requiredDocuments)
+          ? body.requiredDocuments.slice(0, 30).map((d) => String(d).slice(0, 120))
+          : ['Applicant ID Proof'],
+        availability: 'Available',
+        active: true,
+        moduleTag: cat.moduleTag || 'GENERAL',
+        updatedBy: currentProfile.userId,
+        updatedByUid: uid,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+      await setDoc(doc(db, 'cscServiceOverrides', serviceId), payload);
+      return ok({ ...payload, id: serviceId, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }) as ApiResponseEnvelope<T>;
+    } catch (err) {
+      if ((err as { status?: number }).status) throw err;
+      handleFirestoreError(err, OperationType.CREATE, `cscServiceOverrides/${serviceId}`);
+    }
+  }
+
+  if (/^\/api\/csc\/services\/[^/]+\/duplicate$/.test(pathname) && method === 'POST') {
+    if (!isAdmin) errHttp('Only ADMIN can duplicate services.', 403);
+    const sourceId = decodeURIComponent(pathname.split('/')[4] || '');
+    const services = await loadMergedServices();
+    const src = services.find((s) => s.id === sourceId);
+    if (!src) errHttp('Source service not found.', 404);
+    let suffix = Number(Date.now().toString().slice(-6));
+    let serviceId = `CSRV-D${suffix}`;
+    try {
+      while ((await getDoc(doc(db, 'cscServiceOverrides', serviceId))).exists()) {
+        suffix += 1;
+        serviceId = `CSRV-D${suffix}`;
+      }
+      const payload = {
+        serviceId,
+        code: `${src.code}-COPY`,
+        categoryId: src.categoryId,
+        categoryName: src.categoryName,
+        subGroup: src.subGroup || '',
+        name: `${src.name} (Copy)`.slice(0, 200),
+        description: src.description,
+        serviceCharge: null,
+        govtFee: null,
+        totalAmount: null,
+        unitType: null,
+        rateConfigured: false,
+        effectiveDate: null,
+        requiredDocuments: src.requiredDocuments.slice(0, 30),
+        availability: src.availability,
+        active: true,
+        moduleTag: src.moduleTag,
+        updatedBy: currentProfile.userId,
+        updatedByUid: uid,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+      await setDoc(doc(db, 'cscServiceOverrides', serviceId), payload);
+      return ok({ ...payload, id: serviceId, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }) as ApiResponseEnvelope<T>;
+    } catch (err) {
+      if ((err as { status?: number }).status) throw err;
+      handleFirestoreError(err, OperationType.CREATE, `cscServiceOverrides/${serviceId}`);
+    }
+  }
+
+  if (/^\/api\/csc\/services\/[^/]+$/.test(pathname) && method === 'PUT') {
+    if (!isAdmin) errHttp('Only ADMIN can update services.', 403);
+    const serviceId = decodeURIComponent(pathname.split('/')[4] || '');
+    const services = await loadMergedServices();
+    const svc = services.find((s) => s.id === serviceId);
+    if (!svc) errHttp('Service not found.', 404);
+    const nextName = body.name !== undefined ? String(body.name).trim() : svc.name;
+    if (nextName.length < 2) errHttp('Service name must be at least 2 characters.', 422);
+    const ref = doc(db, 'cscServiceOverrides', serviceId);
+    try {
+      const snap = await getDoc(ref);
+      const updatedDoc = {
+        serviceId,
+        code: svc.code,
+        categoryId: svc.categoryId,
+        categoryName: svc.categoryName,
+        subGroup: body.subGroup !== undefined ? String(body.subGroup).trim().slice(0, 120) : svc.subGroup || '',
+        name: nextName.slice(0, 200),
+        description: body.description !== undefined ? String(body.description).trim().slice(0, 500) : svc.description,
+        serviceCharge: svc.serviceCharge,
+        govtFee: svc.govtFee,
+        totalAmount: svc.totalAmount,
+        unitType: svc.unitType,
+        rateConfigured: svc.rateConfigured,
+        effectiveDate: svc.effectiveDate,
+        requiredDocuments: Array.isArray(body.requiredDocuments)
+          ? body.requiredDocuments.slice(0, 30).map((d) => String(d).slice(0, 120))
+          : svc.requiredDocuments,
+        availability: body.availability === 'Unavailable' ? 'Unavailable' : body.availability === 'Available' ? 'Available' : svc.availability,
+        active: body.active !== undefined ? Boolean(body.active) : svc.active,
+        moduleTag: svc.moduleTag,
+        updatedBy: currentProfile.userId,
+        updatedByUid: uid,
+        createdAt: snap.exists() ? snap.data().createdAt : serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+      await setDoc(ref, updatedDoc);
+      return ok({ ...svc, ...updatedDoc, id: serviceId, updatedAt: new Date().toISOString() }) as ApiResponseEnvelope<T>;
+    } catch (err) {
+      if ((err as { status?: number }).status) throw err;
+      handleFirestoreError(err, OperationType.UPDATE, `cscServiceOverrides/${serviceId}`);
+    }
   }
 
   if (/^\/api\/csc\/services\/[^/]+\/rate$/.test(pathname) && method === 'PUT') {
     if (!isAdmin) errHttp('Forbidden: Only ADMIN can configure service rates.', 403);
-    const serviceId = pathname.split('/')[4];
+    const serviceId = decodeURIComponent(pathname.split('/')[4] || '');
     const services = await loadMergedServices();
     const svc = services.find((s) => s.id === serviceId);
     if (!svc) errHttp('Service not found.', 404);
@@ -462,72 +587,77 @@ export async function handleCscFirebaseRoute<T>(
     const effectiveDate = String(body.effectiveDate || new Date().toISOString().slice(0, 10));
 
     const ref = doc(db, 'cscServiceOverrides', serviceId);
-    const snap = await getDoc(ref);
-    await setDoc(ref, {
-      serviceId,
-      code: svc.code,
-      categoryId: svc.categoryId,
-      categoryName: svc.categoryName,
-      subGroup: svc.subGroup || '',
-      name: svc.name,
-      description: svc.description,
-      serviceCharge,
-      govtFee,
-      totalAmount,
-      unitType,
-      rateConfigured: true,
-      effectiveDate,
-      requiredDocuments: svc.requiredDocuments,
-      availability: svc.availability,
-      active: svc.active,
-      moduleTag: svc.moduleTag,
-      updatedBy: currentProfile.userId,
-      updatedByUid: uid,
-      createdAt: snap.exists() ? snap.data().createdAt : serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
-
-    const histId = `RATEH-${Date.now()}`;
-    const histPayload: Omit<CscRateHistoryEntry, 'changedAt'> & {
-      changedAt: string;
-      createdByUid: string;
-      createdAt: ReturnType<typeof serverTimestamp>;
-    } = {
-      id: histId,
-      serviceId,
-      serviceCode: svc.code,
-      serviceName: svc.name,
-      categoryName: svc.categoryName,
-      adminId: currentProfile.userId,
-      oldServiceCharge: svc.serviceCharge,
-      newServiceCharge: serviceCharge,
-      oldGovtFee: svc.govtFee,
-      newGovtFee: govtFee,
-      oldTotalAmount: svc.totalAmount,
-      newTotalAmount: totalAmount,
-      oldUnitType: svc.unitType,
-      newUnitType: unitType,
-      effectiveDate,
-      changeReason: String(body.changeReason || 'Rate configuration updated'),
-      changedAt: new Date().toISOString(),
-      createdByUid: uid,
-      createdAt: serverTimestamp(),
-    };
-    await setDoc(doc(db, 'cscRateHistory', histId), histPayload);
-
-    return ok({
-      service: {
-        ...svc,
+    try {
+      const snap = await getDoc(ref);
+      await setDoc(ref, {
+        serviceId,
+        code: svc.code,
+        categoryId: svc.categoryId,
+        categoryName: svc.categoryName,
+        subGroup: svc.subGroup || '',
+        name: svc.name,
+        description: svc.description,
         serviceCharge,
         govtFee,
         totalAmount,
         unitType,
         rateConfigured: true,
         effectiveDate,
-        updatedAt: new Date().toISOString(),
-      },
-      historyEntry: histPayload,
-    }) as ApiResponseEnvelope<T>;
+        requiredDocuments: svc.requiredDocuments,
+        availability: svc.availability,
+        active: svc.active,
+        moduleTag: svc.moduleTag,
+        updatedBy: currentProfile.userId,
+        updatedByUid: uid,
+        createdAt: snap.exists() ? snap.data().createdAt : serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      const histId = `RATEH-${Date.now()}`;
+      const histPayload: Omit<CscRateHistoryEntry, 'changedAt'> & {
+        changedAt: string;
+        createdByUid: string;
+        createdAt: ReturnType<typeof serverTimestamp>;
+      } = {
+        id: histId,
+        serviceId,
+        serviceCode: svc.code,
+        serviceName: svc.name,
+        categoryName: svc.categoryName,
+        adminId: currentProfile.userId,
+        oldServiceCharge: svc.serviceCharge,
+        newServiceCharge: serviceCharge,
+        oldGovtFee: svc.govtFee,
+        newGovtFee: govtFee,
+        oldTotalAmount: svc.totalAmount,
+        newTotalAmount: totalAmount,
+        oldUnitType: svc.unitType,
+        newUnitType: unitType,
+        effectiveDate,
+        changeReason: String(body.changeReason || 'Rate configuration updated'),
+        changedAt: new Date().toISOString(),
+        createdByUid: uid,
+        createdAt: serverTimestamp(),
+      };
+      await setDoc(doc(db, 'cscRateHistory', histId), histPayload);
+
+      return ok({
+        service: {
+          ...svc,
+          serviceCharge,
+          govtFee,
+          totalAmount,
+          unitType,
+          rateConfigured: true,
+          effectiveDate,
+          updatedAt: new Date().toISOString(),
+        },
+        historyEntry: histPayload,
+      }) as ApiResponseEnvelope<T>;
+    } catch (err) {
+      if ((err as { status?: number }).status) throw err;
+      handleFirestoreError(err, OperationType.WRITE, `cscServiceOverrides/${serviceId}`);
+    }
   }
 
   if (pathname === '/api/csc/rate-history' && method === 'GET') {
@@ -549,6 +679,35 @@ export async function handleCscFirebaseRoute<T>(
     return ok(
       mode === 'INDIVIDUAL' || mode === 'WHOLESALE' ? all.filter((s) => s.mode === mode) : all
     ) as ApiResponseEnvelope<T>;
+  }
+
+  if (pathname === '/api/csc/pvc/quote' && method === 'POST') {
+    const mode = body.mode === 'WHOLESALE' ? 'WHOLESALE' : 'INDIVIDUAL';
+    const slabs = await loadMergedPvcSlabs();
+    const cardTypes = buildInitialPvcCardTypes();
+    const rawItems = Array.isArray(body.items) ? (body.items as Array<{ cardTypeId: string; quantity: number }>) : [];
+    const items: PvcOrderItem[] = rawItems.map((it, idx) => {
+      const card = cardTypes.find((c) => c.id === it.cardTypeId);
+      if (!card) errHttp(`Invalid cardTypeId at item ${idx + 1}`, 422);
+      const qty = Number(it.quantity);
+      const slab = slabs.find((s) => s.mode === mode && s.active && qty >= s.minQty && qty <= s.maxQty);
+      if (!slab) errHttp(`No matching ${mode} PVC slab for ${qty} card(s).`, 422);
+      return {
+        lineId: `PVL-${idx + 1}`,
+        cardTypeId: card.id,
+        cardTypeName: card.name,
+        quantity: qty,
+        ratePerCard: slab.ratePerCard,
+        lineTotal: round2(qty * slab.ratePerCard),
+        slabId: slab.id,
+      };
+    });
+    return ok({
+      mode,
+      items,
+      totalCards: items.reduce((s, i) => s + i.quantity, 0),
+      grandTotal: round2(items.reduce((s, i) => s + i.lineTotal, 0)),
+    }) as ApiResponseEnvelope<T>;
   }
 
   if (pathname === '/api/csc/pvc/slabs' && method === 'POST') {
@@ -583,15 +742,23 @@ export async function handleCscFirebaseRoute<T>(
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     };
-    await setDoc(doc(db, 'pvcSlabs', id), docPayload);
-    return ok({ ...docPayload, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }) as ApiResponseEnvelope<T>;
+    try {
+      await setDoc(doc(db, 'pvcSlabs', id), docPayload);
+      return ok({ ...docPayload, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }) as ApiResponseEnvelope<T>;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, `pvcSlabs/${id}`);
+    }
   }
 
   if (pathname.startsWith('/api/csc/pvc/slabs/') && method === 'DELETE') {
     if (!isAdmin) errHttp('Only ADMIN can delete PVC slabs.', 403);
-    const id = pathname.split('/').pop()!;
-    await deleteDoc(doc(db, 'pvcSlabs', id));
-    return ok({ deleted: true }) as ApiResponseEnvelope<T>;
+    const id = decodeURIComponent(pathname.split('/').pop() || '');
+    try {
+      await deleteDoc(doc(db, 'pvcSlabs', id));
+      return ok({ deleted: true }) as ApiResponseEnvelope<T>;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `pvcSlabs/${id}`);
+    }
   }
 
   if (pathname === '/api/csc/pvc/shops' && method === 'GET') {
@@ -617,8 +784,12 @@ export async function handleCscFirebaseRoute<T>(
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     };
-    await setDoc(doc(db, 'wholesaleShops', id), payload);
-    return ok({ ...payload, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }) as ApiResponseEnvelope<T>;
+    try {
+      await setDoc(doc(db, 'wholesaleShops', id), payload);
+      return ok({ ...payload, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }) as ApiResponseEnvelope<T>;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, `wholesaleShops/${id}`);
+    }
   }
 
   if (pathname === '/api/csc/pvc/orders' && method === 'GET') {
@@ -710,8 +881,12 @@ export async function handleCscFirebaseRoute<T>(
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     };
-    await setDoc(doc(db, 'pvcOrders', orderId), payload);
-    return ok({ ...payload, createdAt: nowIso, updatedAt: nowIso }) as ApiResponseEnvelope<T>;
+    try {
+      await setDoc(doc(db, 'pvcOrders', orderId), payload);
+      return ok({ ...payload, createdAt: nowIso, updatedAt: nowIso }) as ApiResponseEnvelope<T>;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, `pvcOrders/${orderId}`);
+    }
   }
 
   // =========================================================================
@@ -829,32 +1004,41 @@ export async function handleCscFirebaseRoute<T>(
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     };
-    await setDoc(doc(db, 'cscOrders', orderId), payload);
-    return ok({ ...payload, createdAt: nowIso, updatedAt: nowIso }) as ApiResponseEnvelope<T>;
+    try {
+      await setDoc(doc(db, 'cscOrders', orderId), payload);
+      return ok({ ...payload, createdAt: nowIso, updatedAt: nowIso }) as ApiResponseEnvelope<T>;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, `cscOrders/${orderId}`);
+    }
   }
 
   if (/^\/api\/csc\/orders\/[^/]+\/status$/.test(pathname) && method === 'PATCH') {
-    const orderId = pathname.split('/')[4];
+    const orderId = decodeURIComponent(pathname.split('/')[4] || '');
     const ref = doc(db, 'cscOrders', orderId);
-    const snap = await getDoc(ref);
-    if (!snap.exists()) errHttp('Order not found.', 404);
-    const data = snap.data();
-    const statusHistory = Array.isArray(data.statusHistory) ? data.statusHistory : [];
-    const nextStatus = String(body.status) as CscApplicationStatus;
-    statusHistory.unshift({
-      id: `STH-${Date.now()}`,
-      previousStatus: data.applicationStatus,
-      newStatus: nextStatus,
-      changedBy: currentProfile.userId,
-      remarks: String(body.remarks || ''),
-      changedAt: new Date().toISOString(),
-    });
-    await updateDoc(ref, {
-      applicationStatus: nextStatus,
-      statusHistory,
-      updatedAt: serverTimestamp(),
-    });
-    return ok({ ...data, applicationStatus: nextStatus, statusHistory }) as ApiResponseEnvelope<T>;
+    try {
+      const snap = await getDoc(ref);
+      if (!snap.exists()) errHttp('Order not found.', 404);
+      const data = snap.data();
+      const statusHistory = Array.isArray(data.statusHistory) ? data.statusHistory : [];
+      const nextStatus = String(body.status) as CscApplicationStatus;
+      statusHistory.unshift({
+        id: `STH-${Date.now()}`,
+        previousStatus: data.applicationStatus,
+        newStatus: nextStatus,
+        changedBy: currentProfile.userId,
+        remarks: String(body.remarks || ''),
+        changedAt: new Date().toISOString(),
+      });
+      await updateDoc(ref, {
+        applicationStatus: nextStatus,
+        statusHistory,
+        updatedAt: serverTimestamp(),
+      });
+      return ok({ ...data, applicationStatus: nextStatus, statusHistory }) as ApiResponseEnvelope<T>;
+    } catch (err) {
+      if ((err as { status?: number }).status) throw err;
+      handleFirestoreError(err, OperationType.UPDATE, `cscOrders/${orderId}`);
+    }
   }
 
   if (pathname === '/api/csc/grievances' && method === 'GET') {
@@ -905,8 +1089,12 @@ export async function handleCscFirebaseRoute<T>(
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     };
-    await setDoc(doc(db, 'cscGrievances', trackingId), payload);
-    return ok({ ...payload, createdAt: nowIso, updatedAt: nowIso }) as ApiResponseEnvelope<T>;
+    try {
+      await setDoc(doc(db, 'cscGrievances', trackingId), payload);
+      return ok({ ...payload, createdAt: nowIso, updatedAt: nowIso }) as ApiResponseEnvelope<T>;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, `cscGrievances/${trackingId}`);
+    }
   }
 
   if (pathname === '/api/csc/documents' && method === 'GET') {
@@ -942,8 +1130,32 @@ export async function handleCscFirebaseRoute<T>(
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     };
-    await setDoc(doc(db, 'cscDocuments', docId), payload);
-    return ok({ ...payload, createdAt: nowIso, updatedAt: nowIso } as unknown as CscDocumentRecord) as ApiResponseEnvelope<T>;
+    try {
+      await setDoc(doc(db, 'cscDocuments', docId), payload);
+      return ok({ ...payload, createdAt: nowIso, updatedAt: nowIso } as unknown as CscDocumentRecord) as ApiResponseEnvelope<T>;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, `cscDocuments/${docId}`);
+    }
+  }
+
+  if (pathname === '/api/csc/payment-methods' && method === 'GET') {
+    return ok([
+      { id: 'PM-CASH', name: 'Cash', active: true },
+      { id: 'PM-UPI', name: 'UPI', active: true },
+      { id: 'PM-BANK', name: 'Bank Transfer', active: true },
+    ]) as ApiResponseEnvelope<T>;
+  }
+
+  if (pathname === '/api/csc/receipts' && method === 'GET') {
+    const [orders, pvcOrders] = await Promise.all([
+      listScopedDocs('cscOrders', uid, isBootAdmin, isCustomer),
+      listScopedDocs('pvcOrders', uid, isBootAdmin, isCustomer),
+    ]);
+    const receipts = [
+      ...orders.flatMap((o) => (Array.isArray(o.payments) ? o.payments : [])),
+      ...pvcOrders.flatMap((o) => (Array.isArray(o.payments) ? o.payments : [])),
+    ];
+    return ok(receipts) as ApiResponseEnvelope<T>;
   }
 
   if (pathname === '/api/csc/portal/me' && method === 'GET') {

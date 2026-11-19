@@ -721,7 +721,7 @@ export class FinanceStore {
         startDate: '2025-04-01',
         endDate: '2026-03-31',
         status: 'Locked',
-        lockedBy: 'MC-AD-202613-0001',
+        lockedBy: 'MC2627110001',
         lockedAt: '2026-04-05T18:00:00.000Z',
         carryForwardVoucherNo: 'MC-OP-2026-00001',
       },
@@ -735,8 +735,8 @@ export class FinanceStore {
     ];
 
     this.fiscalPeriods = [
-      { periodCode: '2026-09', fyCode: 'FY 2026-27', monthLabel: 'September 2026', startDate: '2026-09-01', endDate: '2026-09-30', status: 'Closed', lockReason: 'Monthly GSTR-3B & BRS Closed', lockedBy: 'MC-AD-202613-0001', lockedAt: '2026-10-05T18:00:00.000Z' },
-      { periodCode: '2026-10', fyCode: 'FY 2026-27', monthLabel: 'October 2026', startDate: '2026-10-01', endDate: '2026-10-31', status: 'Closed', lockReason: 'October Books Closed after Audit', lockedBy: 'MC-AD-202613-0001', lockedAt: '2026-11-04T18:00:00.000Z' },
+      { periodCode: '2026-09', fyCode: 'FY 2026-27', monthLabel: 'September 2026', startDate: '2026-09-01', endDate: '2026-09-30', status: 'Closed', lockReason: 'Monthly GSTR-3B & BRS Closed', lockedBy: 'MC2627110001', lockedAt: '2026-10-05T18:00:00.000Z' },
+      { periodCode: '2026-10', fyCode: 'FY 2026-27', monthLabel: 'October 2026', startDate: '2026-10-01', endDate: '2026-10-31', status: 'Closed', lockReason: 'October Books Closed after Audit', lockedBy: 'MC2627110001', lockedAt: '2026-11-04T18:00:00.000Z' },
       { periodCode: '2026-11', fyCode: 'FY 2026-27', monthLabel: 'November 2026', startDate: '2026-11-01', endDate: '2026-11-30', status: 'Open' },
       { periodCode: '2026-12', fyCode: 'FY 2026-27', monthLabel: 'December 2026', startDate: '2026-12-01', endDate: '2026-12-31', status: 'Open' },
     ];
@@ -802,7 +802,7 @@ export class FinanceStore {
         counterCode: 'CTR-01',
         counterName: 'Front Desk Counter 01 (Apps & CSC)',
         entityCode: 'ENT-MAIN',
-        custodianUserId: 'MC-ST-202613-0003',
+        custodianUserId: 'MC2627110003',
         coaAccountCode: '1001',
         openingBalance: 0,
         currentBalance: 0,
@@ -813,7 +813,7 @@ export class FinanceStore {
         counterCode: 'CTR-02',
         counterName: 'Hardware & Service Desk 02',
         entityCode: 'ENT-MAIN',
-        custodianUserId: 'MC-MN-202613-0002',
+        custodianUserId: 'MC2627110002',
         coaAccountCode: '1002',
         openingBalance: 0,
         currentBalance: 0,
@@ -824,7 +824,7 @@ export class FinanceStore {
         counterCode: 'PETTY-01',
         counterName: 'Petty Cash Imprest Box',
         entityCode: 'ENT-MAIN',
-        custodianUserId: 'MC-AD-202613-0001',
+        custodianUserId: 'MC2627110001',
         coaAccountCode: '1003',
         openingBalance: 0,
         currentBalance: 0,
@@ -835,7 +835,7 @@ export class FinanceStore {
         counterCode: 'PNB-CSP-01',
         counterName: 'PNB CSP Customer Banking Counter (Isolated)',
         entityCode: 'ENT-PNB-CSP',
-        custodianUserId: 'MC-AD-202613-0001',
+        custodianUserId: 'MC2627110001',
         coaAccountCode: 'ISOLATED-CSP',
         openingBalance: 0,
         currentBalance: 0,
@@ -920,7 +920,7 @@ export class FinanceStore {
     this.employees = [
       {
         empId: 'EMP-001',
-        userId: 'MC-AD-202613-0001',
+        userId: 'MC2627110001',
         fullName: 'Mamun Reja',
         designation: 'Managing Proprietor',
         department: 'Management',
@@ -936,7 +936,7 @@ export class FinanceStore {
       },
       {
         empId: 'EMP-002',
-        userId: 'MC-MN-202613-0002',
+        userId: 'MC2627110002',
         fullName: 'Nadia Sultana',
         designation: 'Operations & CSC Manager',
         department: 'Operations',
@@ -952,7 +952,7 @@ export class FinanceStore {
       },
       {
         empId: 'EMP-003',
-        userId: 'MC-ST-202613-0003',
+        userId: 'MC2627110003',
         fullName: 'Rashed Khan',
         designation: 'Front-Desk Operator & CSP Assistant',
         department: 'Front Desk',

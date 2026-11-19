@@ -93,6 +93,13 @@
           "type": "string",
           "maxLength": 300
         },
+        "totpEnabled": {
+          "type": "boolean"
+        },
+        "totpSecret": {
+          "type": "string",
+          "maxLength": 128
+        },
         "createdAt": {
           "type": "string",
           "format": "date-time"

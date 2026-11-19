@@ -189,14 +189,14 @@ test('Phase 08 Scenarios 1-12: Login security, CAPTCHA/OTP defenses, Lockout, RB
 
   try {
     // 1. Valid login (CAPTCHA + Password + OTP -> active session)
-    const adminSession = await loginAs(baseUrl, h.store, 'MC-AD-202613-0001', 'Admin@2026!');
+    const adminSession = await loginAs(baseUrl, h.store, 'MC2627110001', '8101352105');
     assert.ok(adminSession.cookies.mun_session, 'HttpOnly session cookie issued');
     assert.ok(adminSession.cookies.mun_csrf, 'CSRF cookie issued');
 
     // 2. Invalid password attempt + attempt countdown
     const capBadPwd = issueCaptcha(h.store);
     const badPwdRes = await reqApi(baseUrl, 'POST', '/api/auth/login', {
-      userId: 'MC-ST-202613-0003',
+      userId: 'MC2627110003',
       password: 'WrongPassword!1',
       captchaId: capBadPwd.id,
       captchaAnswer: capBadPwd.answer,
@@ -206,7 +206,7 @@ test('Phase 08 Scenarios 1-12: Login security, CAPTCHA/OTP defenses, Lockout, RB
 
     // 3. Invalid & reused CAPTCHA rejected
     const badCapRes = await reqApi(baseUrl, 'POST', '/api/auth/login', {
-      userId: 'MC-ST-202613-0003',
+      userId: 'MC2627110003',
       password: 'Staff@2026!',
       captchaId: capBadPwd.id, // reused single-use captcha id
       captchaAnswer: capBadPwd.answer,
@@ -216,7 +216,7 @@ test('Phase 08 Scenarios 1-12: Login security, CAPTCHA/OTP defenses, Lockout, RB
     // 4. Expired OTP rejected & logged as EXPIRED
     const capExp = issueCaptcha(h.store);
     const step1Exp = await reqApi(baseUrl, 'POST', '/api/auth/login', {
-      userId: 'MC-MN-202613-0002',
+      userId: 'MC2627110002',
       password: 'Manager@2026!',
       captchaId: capExp.id,
       captchaAnswer: capExp.answer,
@@ -236,7 +236,7 @@ test('Phase 08 Scenarios 1-12: Login security, CAPTCHA/OTP defenses, Lockout, RB
     // 5. Reused OTP rejected
     const capReuse = issueCaptcha(h.store);
     const step1Reuse = await reqApi(baseUrl, 'POST', '/api/auth/login', {
-      userId: 'MC-MN-202613-0002',
+      userId: 'MC2627110002',
       password: 'Manager@2026!',
       captchaId: capReuse.id,
       captchaAnswer: capReuse.answer,
@@ -256,7 +256,7 @@ test('Phase 08 Scenarios 1-12: Login security, CAPTCHA/OTP defenses, Lockout, RB
     // 6. Excessive OTP attempts (5 failures -> 429)
     const capMaxOtp = issueCaptcha(h.store);
     const step1MaxOtp = await reqApi(baseUrl, 'POST', '/api/auth/login', {
-      userId: 'MC-MN-202613-0002',
+      userId: 'MC2627110002',
       password: 'Manager@2026!',
       captchaId: capMaxOtp.id,
       captchaAnswer: capMaxOtp.answer,
@@ -274,11 +274,11 @@ test('Phase 08 Scenarios 1-12: Login security, CAPTCHA/OTP defenses, Lockout, RB
     });
     assert.equal(sixthOtp.status, 429);
 
-    // 7. Account lockout after remaining failed attempts on MC-ST-202613-0003 (1 already failed above -> 4 more)
+    // 7. Account lockout after remaining failed attempts on MC2627110003 (1 already failed above -> 4 more)
     for (let i = 0; i < 4; i++) {
       const c = issueCaptcha(h.store);
       const r = await reqApi(baseUrl, 'POST', '/api/auth/login', {
-        userId: 'MC-ST-202613-0003',
+        userId: 'MC2627110003',
         password: 'WrongPassword!1',
         captchaId: c.id,
         captchaAnswer: c.answer,
@@ -290,21 +290,21 @@ test('Phase 08 Scenarios 1-12: Login security, CAPTCHA/OTP defenses, Lockout, RB
       }
     }
     assert.ok(
-      h.phase08Store.securityAlerts.some((a) => a.category === 'ACCOUNT_LOCKOUT' && a.relatedUserId === 'MC-ST-202613-0003')
+      h.phase08Store.securityAlerts.some((a) => a.category === 'ACCOUNT_LOCKOUT' && a.relatedUserId === 'MC2627110003')
     );
 
     // Unlock staff via Admin for RBAC checks
     const unlockRes = await reqApi(
       baseUrl,
       'PATCH',
-      '/api/users/MC-ST-202613-0003/status',
+      '/api/users/MC2627110003/status',
       { status: 'ACTIVE' },
       adminSession.cookies
     );
     assert.equal(unlockRes.status, 200);
 
     // 8 & 9. Unauthorized module & admin API access
-    const staffSession = await loginAs(baseUrl, h.store, 'MC-ST-202613-0003', 'Staff@2026!');
+    const staffSession = await loginAs(baseUrl, h.store, 'MC2627110003', 'Staff@2026!');
     const staffReportAttempt = await reqApi(baseUrl, 'GET', '/api/v1/reports/dashboard', undefined, staffSession.cookies);
     assert.equal(staffReportAttempt.status, 403);
 
@@ -334,24 +334,24 @@ test('Phase 08 Scenarios 1-12: Login security, CAPTCHA/OTP defenses, Lockout, RB
     const escRes = await reqApi(
       baseUrl,
       'PUT',
-      '/api/users/MC-ST-202613-0003/permissions',
+      '/api/users/MC2627110003/permissions',
       { permissions: { 'settings.EDIT': true } },
       managerCookies
     );
     assert.equal(escRes.status, 403);
 
     // 11. Session expiration check
-    const staffSessObj = Array.from(h.store.sessions.values()).find((s) => s.userId === 'MC-ST-202613-0003' && s.status === 'ACTIVE')!;
+    const staffSessObj = Array.from(h.store.sessions.values()).find((s) => s.userId === 'MC2627110003' && s.status === 'ACTIVE')!;
     staffSessObj.expiresAt = Date.now() - 5000;
     const expiredSessRes = await reqApi(baseUrl, 'GET', '/api/auth/me', undefined, staffSession.cookies);
     assert.equal(expiredSessRes.status, 401);
 
     // 12. Force logout / emergency session revocation
-    const staffSession2 = await loginAs(baseUrl, h.store, 'MC-ST-202613-0003', 'Staff@2026!');
+    const staffSession2 = await loginAs(baseUrl, h.store, 'MC2627110003', 'Staff@2026!');
     const forceRevokeRes = await reqApi(
       baseUrl,
       'POST',
-      '/api/v1/security/emergency/revoke-all-sessions/MC-ST-202613-0003',
+      '/api/v1/security/emergency/revoke-all-sessions/MC2627110003',
       {},
       adminSession.cookies
     );
@@ -369,7 +369,7 @@ test('Phase 08 Scenarios 13-19: Multi-channel OTP, Devices, Concurrent Sessions,
   const baseUrl = await startServer(h.server);
 
   try {
-    const admin = await loginAs(baseUrl, h.store, 'MC-AD-202613-0001', 'Admin@2026!', {
+    const admin = await loginAs(baseUrl, h.store, 'MC2627110001', '8101352105', {
       channel: 'WHATSAPP',
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/126.0',
       deviceName: 'Admin HQ Desktop',
@@ -393,11 +393,11 @@ test('Phase 08 Scenarios 13-19: Multi-channel OTP, Devices, Concurrent Sessions,
     assert.ok(otpLogsRes.json.data.some((l: any) => l.channel === 'EMAIL' && l.deliveryStatus === 'NOT_CONFIGURED'));
 
     // 14. New device login detection, Trust, Flag Suspicious, Revoke
-    const staffDev1 = await loginAs(baseUrl, h.store, 'MC-ST-202613-0003', 'Staff@2026!', {
+    const staffDev1 = await loginAs(baseUrl, h.store, 'MC2627110003', 'Staff@2026!', {
       userAgent: 'Mozilla/5.0 (Linux; Android 14) Firefox/120.0',
       deviceName: 'Counter Phone 1',
     });
-    const staffDev2 = await loginAs(baseUrl, h.store, 'MC-ST-202613-0003', 'Staff@2026!', {
+    const staffDev2 = await loginAs(baseUrl, h.store, 'MC2627110003', 'Staff@2026!', {
       userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X) Safari/17.0',
       deviceName: 'Backoffice Laptop',
     });
@@ -408,7 +408,7 @@ test('Phase 08 Scenarios 13-19: Multi-channel OTP, Devices, Concurrent Sessions,
       baseUrl,
       'POST',
       `/api/v1/security/devices/${staffDev2.verifyData.device.deviceId}/verify`,
-      { userId: 'MC-ST-202613-0003' },
+      { userId: 'MC2627110003' },
       admin.cookies
     );
     assert.equal(trustRes.status, 200);
@@ -425,22 +425,22 @@ test('Phase 08 Scenarios 13-19: Multi-channel OTP, Devices, Concurrent Sessions,
     assert.equal(suspRes.json.data.device.verificationStatus, 'SUSPICIOUS');
 
     // 15. Concurrent session limit enforcement (limit = 3 for Manager)
-    const m1 = await loginAs(baseUrl, h.store, 'MC-MN-202613-0002', 'Manager@2026!', { deviceName: 'Mgr-1' });
-    await loginAs(baseUrl, h.store, 'MC-MN-202613-0002', 'Manager@2026!', { deviceName: 'Mgr-2' });
-    await loginAs(baseUrl, h.store, 'MC-MN-202613-0002', 'Manager@2026!', { deviceName: 'Mgr-3' });
-    await loginAs(baseUrl, h.store, 'MC-MN-202613-0002', 'Manager@2026!', { deviceName: 'Mgr-4' });
+    const m1 = await loginAs(baseUrl, h.store, 'MC2627110002', 'Manager@2026!', { deviceName: 'Mgr-1' });
+    await loginAs(baseUrl, h.store, 'MC2627110002', 'Manager@2026!', { deviceName: 'Mgr-2' });
+    await loginAs(baseUrl, h.store, 'MC2627110002', 'Manager@2026!', { deviceName: 'Mgr-3' });
+    await loginAs(baseUrl, h.store, 'MC2627110002', 'Manager@2026!', { deviceName: 'Mgr-4' });
     const m1Me = await reqApi(baseUrl, 'GET', '/api/auth/me', undefined, m1.cookies);
     assert.equal(m1Me.status, 401, 'Oldest concurrent session evicted beyond limit=3');
 
     // 16. Password reuse prevention + 90-day expiry flag
-    const staffCur = await loginAs(baseUrl, h.store, 'MC-ST-202613-0003', 'Staff@2026!', {
+    const staffCur = await loginAs(baseUrl, h.store, 'MC2627110003', 'Staff@2026!', {
       userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X) Safari/17.0',
       deviceName: 'Backoffice Laptop',
     });
     const reusePwdRes = await reqApi(
       baseUrl,
       'POST',
-      '/api/users/MC-ST-202613-0003/change-password',
+      '/api/users/MC2627110003/change-password',
       { currentPassword: 'Staff@2026!', newPassword: 'Staff@2026!', confirmPassword: 'Staff@2026!' },
       staffCur.cookies
     );
@@ -449,7 +449,7 @@ test('Phase 08 Scenarios 13-19: Multi-channel OTP, Devices, Concurrent Sessions,
     const newPwdRes = await reqApi(
       baseUrl,
       'POST',
-      '/api/users/MC-ST-202613-0003/change-password',
+      '/api/users/MC2627110003/change-password',
       { currentPassword: 'Staff@2026!', newPassword: 'Staff@2026!New1', confirmPassword: 'Staff@2026!New1' },
       staffCur.cookies
     );
@@ -473,7 +473,7 @@ test('Phase 08 Scenarios 13-19: Multi-channel OTP, Devices, Concurrent Sessions,
       baseUrl,
       'POST',
       `/api/v1/security/custom-roles/${customRoleRes.json.data.roleCode}/assign`,
-      { userId: 'MC-ST-202613-0003' },
+      { userId: 'MC2627110003' },
       admin.cookies
     );
     assert.equal(assignRoleRes.status, 200);
@@ -483,7 +483,7 @@ test('Phase 08 Scenarios 13-19: Multi-channel OTP, Devices, Concurrent Sessions,
       baseUrl,
       'POST',
       '/api/v1/security/permission-groups/GRP-FRONT-DESK/apply',
-      { userId: 'MC-ST-202613-0003' },
+      { userId: 'MC2627110003' },
       admin.cookies
     );
     assert.equal(applyGrpRes.status, 200);
@@ -492,12 +492,12 @@ test('Phase 08 Scenarios 13-19: Multi-channel OTP, Devices, Concurrent Sessions,
       baseUrl,
       'POST',
       '/api/v1/security/temporary-permissions',
-      { userId: 'MC-ST-202613-0003', permissionKey: 'finance_engine.EXPORT', durationHours: 2, reason: 'Quarter close' },
+      { userId: 'MC2627110003', permissionKey: 'finance_engine.EXPORT', durationHours: 2, reason: 'Quarter close' },
       admin.cookies
     );
     assert.equal(grantTempRes.status, 201);
     const grantCode = grantTempRes.json.data.grantCode;
-    assert.equal(h.store.getEffectivePermissions(h.store.findUserByUserId('MC-ST-202613-0003')!)['finance_engine.EXPORT'], true);
+    assert.equal(h.store.getEffectivePermissions(h.store.findUserByUserId('MC2627110003')!)['finance_engine.EXPORT'], true);
 
     const revokeTempRes = await reqApi(
       baseUrl,
@@ -507,7 +507,7 @@ test('Phase 08 Scenarios 13-19: Multi-channel OTP, Devices, Concurrent Sessions,
       admin.cookies
     );
     assert.equal(revokeTempRes.status, 200);
-    assert.notEqual(h.store.getEffectivePermissions(h.store.findUserByUserId('MC-ST-202613-0003')!)['finance_engine.EXPORT'], true);
+    assert.notEqual(h.store.getEffectivePermissions(h.store.findUserByUserId('MC2627110003')!)['finance_engine.EXPORT'], true);
 
     // 18 & 19. Before/After Audit Chain search, export & tamper detection
     const auditChainRes = await reqApi(
@@ -540,8 +540,8 @@ test('Phase 08 Scenarios 20-30: Schedules, Cloud/Secondary Storage, Key Rotation
   const baseUrl = await startServer(h.server);
 
   try {
-    const admin = await loginAs(baseUrl, h.store, 'MC-AD-202613-0001', 'Admin@2026!');
-    const manager = await loginAs(baseUrl, h.store, 'MC-MN-202613-0002', 'Manager@2026!');
+    const admin = await loginAs(baseUrl, h.store, 'MC2627110001', '8101352105');
+    const manager = await loginAs(baseUrl, h.store, 'MC2627110002', 'Manager@2026!');
 
     // Seed test voucher for backup duplicate-prevention drill
     const testVoucher = validateAndBuildVoucher({
@@ -747,7 +747,7 @@ test('Phase 08 Scenarios 20-30: Schedules, Cloud/Secondary Storage, Key Rotation
       },
       formData: {},
       status: 'Processing',
-      assignedStaffId: 'MC-ST-202613-0003',
+      assignedStaffId: 'MC2627110003',
       assignedCounterCode: 'CTR-01',
       submissionDate: nowIso,
       expectedCompletionDate: nowIso,
@@ -758,7 +758,7 @@ test('Phase 08 Scenarios 20-30: Schedules, Cloud/Secondary Storage, Key Rotation
       assignmentHistory: [],
       archivedAt: null,
       archivedBy: null,
-      createdBy: 'MC-ST-202613-0003',
+      createdBy: 'MC2627110003',
       createdAt: nowIso,
       updatedAt: nowIso,
     });

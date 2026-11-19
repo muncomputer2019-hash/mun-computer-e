@@ -63,9 +63,9 @@ function buildIsolatedSandbox() {
     secondaryBackupDir: path.join(tmpRoot, 'secondary'),
   });
   const engine = new ReportDataEngine(s, p3, erp, fin, rep);
-  const admin = s.findUserByUserId('MC-AD-202613-0001')!;
-  const manager = s.findUserByUserId('MC-MN-202613-0002')!;
-  const staff = s.findUserByUserId('MC-ST-202613-0003')!;
+  const admin = s.findUserByUserId('MC2627110001')!;
+  const manager = s.findUserByUserId('MC2627110002')!;
+  const staff = s.findUserByUserId('MC2627110003')!;
 
   // Seed isolated sandbox test fixtures (disposed after test execution)
   const now = new Date().toISOString();
@@ -589,7 +589,7 @@ export function runSecurityAuditSuite(actorUserId: string, live: LiveStoresConte
   });
 
   // 3. Privilege Escalation & RBAC Check
-  const staffUser = live.securityStore.findUserByUserId('MC-ST-202613-0003');
+  const staffUser = live.securityStore.findUserByUserId('MC2627110003');
   const staffBlockedAdmin = staffUser ? !live.securityStore.hasPermission(staffUser, 'settings', 'EDIT') : false;
   findings.push({
     findingCode: `SEC-FND-${Date.now().toString(36).toUpperCase()}-03`,
@@ -606,7 +606,7 @@ export function runSecurityAuditSuite(actorUserId: string, live: LiveStoresConte
   });
 
   // 4. Cryptographic Failures (Aadhaar AES-256-GCM + Backup HMAC)
-  const adminUser = live.securityStore.findUserByUserId('MC-AD-202613-0001');
+  const adminUser = live.securityStore.findUserByUserId('MC2627110001');
   const aadhaarEncrypted = Boolean(adminUser?.aadhaarEncrypted && adminUser.aadhaarEncrypted.split(':').length === 3);
   const aesTestOk = (() => {
     const enc = encryptSensitiveField('123456789012');
@@ -707,7 +707,7 @@ export async function runPerformanceBenchmarkSuite(
     live.financeStore,
     live.reportStore
   );
-  const admin = live.securityStore.findUserByUserId('MC-AD-202613-0001')!;
+  const admin = live.securityStore.findUserByUserId('MC2627110001')!;
   const results: QaPerformanceResult[] = [];
   const now = new Date().toISOString();
 

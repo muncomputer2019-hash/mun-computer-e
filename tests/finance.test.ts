@@ -128,9 +128,9 @@ test('Phase 05 Financial Engine: Double-Entry, Period Lock, Maker-Checker, PNB C
   const baseUrl = `http://127.0.0.1:${address.port}`;
 
   try {
-    const adminCookies = await loginAs(baseUrl, securityStore, 'MC-AD-202613-0001', 'Admin@2026!');
-    const managerCookies = await loginAs(baseUrl, securityStore, 'MC-MN-202613-0002', 'Manager@2026!');
-    const auditorCookies = await loginAs(baseUrl, securityStore, 'MC-AU-202613-0001', 'Auditor@2026!');
+    const adminCookies = await loginAs(baseUrl, securityStore, 'MC2627110001', '8101352105');
+    const managerCookies = await loginAs(baseUrl, securityStore, 'MC2627110002', 'Manager@2026!');
+    const auditorCookies = await loginAs(baseUrl, securityStore, 'MC2627110004', 'Auditor@2026!');
 
     // 1. Initial Trial Balance & Balance Sheet Equations
     const ov1 = await requestApi(baseUrl, 'GET', '/api/finance/overview?entityCode=ENT-MAIN', undefined, adminCookies);

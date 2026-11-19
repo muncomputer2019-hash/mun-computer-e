@@ -136,9 +136,9 @@ test('Phase 09 Complete Enterprise QA Lifecycle, RBAC, Safety Guards, Exporters 
   const baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 
   try {
-    const adminCookies = await loginAs(baseUrl, store, 'MC-AD-202613-0001', 'Admin@2026!');
-    const managerCookies = await loginAs(baseUrl, store, 'MC-MN-202613-0002', 'Manager@2026!');
-    const staffCookies = await loginAs(baseUrl, store, 'MC-ST-202613-0003', 'Staff@2026!');
+    const adminCookies = await loginAs(baseUrl, store, 'MC2627110001', '8101352105');
+    const managerCookies = await loginAs(baseUrl, store, 'MC2627110002', 'Manager@2026!');
+    const staffCookies = await loginAs(baseUrl, store, 'MC2627110003', 'Staff@2026!');
 
     // -------------------------------------------------------------------------
     // 1. Initial Integrity Check: Tests start PENDING (never faked as passed)
@@ -217,7 +217,7 @@ test('Phase 09 Complete Enterprise QA Lifecycle, RBAC, Safety Guards, Exporters 
         reproductionSteps: '1. Open Report Center\n2. Select A5 orientation',
         expectedResult: 'Full QR fits inside footer margins',
         actualResult: 'Right border clipped by 2mm',
-        assignedDeveloper: 'MC-MN-202613-0002',
+        assignedDeveloper: 'MC2627110002',
       },
       staffCookies
     );

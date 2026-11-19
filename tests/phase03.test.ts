@@ -131,8 +131,8 @@ async function withServer(
 
 test('P3-1. RBAC protection: non-Admin blocked (403) from Admin Master Settings & Staff blocked from proposals', async () => {
   await withServer(async (baseUrl, store) => {
-    const manager = await loginAs(baseUrl, store, 'MC-MN-202613-0002', 'Manager@2026!');
-    const staff = await loginAs(baseUrl, store, 'MC-ST-202613-0003', 'Staff@2026!');
+    const manager = await loginAs(baseUrl, store, 'MC2627110002', 'Manager@2026!');
+    const staff = await loginAs(baseUrl, store, 'MC2627110003', 'Staff@2026!');
 
     // Manager & Staff cannot call Admin-only Master Settings endpoints
     for (const actor of [manager, staff]) {
@@ -209,7 +209,7 @@ test('P3-1. RBAC protection: non-Admin blocked (403) from Admin Master Settings 
 
 test('P3-2. Strong Password Policy enforced across user creation and password reset', async () => {
   await withServer(async (baseUrl, store) => {
-    const admin = await loginAs(baseUrl, store, 'MC-AD-202613-0001', 'Admin@2026!');
+    const admin = await loginAs(baseUrl, store, 'MC2627110001', '8101352105');
 
     const weakCreate = await requestApi(
       baseUrl,
@@ -247,8 +247,8 @@ test('P3-2. Strong Password Policy enforced across user creation and password re
 
 test('P3-3. Settings Approval Workflow: Manager proposes -> live unchanged -> Admin rejects/approves + no self-approval', async () => {
   await withServer(async (baseUrl, store) => {
-    const manager = await loginAs(baseUrl, store, 'MC-MN-202613-0002', 'Manager@2026!');
-    const admin = await loginAs(baseUrl, store, 'MC-AD-202613-0001', 'Admin@2026!');
+    const manager = await loginAs(baseUrl, store, 'MC2627110002', 'Manager@2026!');
+    const admin = await loginAs(baseUrl, store, 'MC2627110001', '8101352105');
 
     // Baseline SRV-101 rate
     const beforeRates = await requestApi(baseUrl, 'GET', '/api/service-rates', undefined, admin.cookies);
@@ -357,7 +357,7 @@ test('P3-3. Settings Approval Workflow: Manager proposes -> live unchanged -> Ad
 
 test('P3-4. Service Rate Profit Formula (Charge - Cost) & Immutable Completed Transaction Snapshots', async () => {
   await withServer(async (baseUrl, store) => {
-    const admin = await loginAs(baseUrl, store, 'MC-AD-202613-0001', 'Admin@2026!');
+    const admin = await loginAs(baseUrl, store, 'MC2627110001', '8101352105');
 
     const before = await requestApi(baseUrl, 'GET', '/api/service-rates', undefined, admin.cookies);
     const snapshotCountBefore = before.body.data.completedSnapshots.length;
@@ -389,7 +389,7 @@ test('P3-4. Service Rate Profit Formula (Charge - Cost) & Immutable Completed Tr
 
 test('P3-5. Atomic Financial-Year Sequential Numbers (MCR/MCI/MCA) under Concurrent Load', async () => {
   await withServer(async (baseUrl, store) => {
-    const admin = await loginAs(baseUrl, store, 'MC-AD-202613-0001', 'Admin@2026!');
+    const admin = await loginAs(baseUrl, store, 'MC2627110001', '8101352105');
 
     const [receipts, invoices, apps] = await Promise.all([
       Promise.all(
@@ -425,8 +425,8 @@ test('P3-5. Atomic Financial-Year Sequential Numbers (MCR/MCI/MCA) under Concurr
 
 test('P3-6. Daily Cash Closing: formula, mandatory difference reason, variance approval & audit trail', async () => {
   await withServer(async (baseUrl, store) => {
-    const staff = await loginAs(baseUrl, store, 'MC-ST-202613-0003', 'Staff@2026!');
-    const admin = await loginAs(baseUrl, store, 'MC-AD-202613-0001', 'Admin@2026!');
+    const staff = await loginAs(baseUrl, store, 'MC2627110003', 'Staff@2026!');
+    const admin = await loginAs(baseUrl, store, 'MC2627110001', '8101352105');
 
     // Missing reason when variance != 0 -> 422
     const missingReason = await requestApi(
@@ -485,7 +485,7 @@ test('P3-6. Daily Cash Closing: formula, mandatory difference reason, variance a
 
 test('P3-7. AES-256-GCM Backup Encryption, SHA-256 Restore & API Secret Masking', async () => {
   await withServer(async (baseUrl, store) => {
-    const admin = await loginAs(baseUrl, store, 'MC-AD-202613-0001', 'Admin@2026!');
+    const admin = await loginAs(baseUrl, store, 'MC2627110001', '8101352105');
 
     // Backup before modifying company name
     const bakRes = await requestApi(
@@ -551,7 +551,7 @@ test('P3-7. AES-256-GCM Backup Encryption, SHA-256 Restore & API Secret Masking'
 
 test('P3-8. Document Upload Validation (Type/10MB Size) & Maintenance Mode (503 for Non-Admin)', async () => {
   await withServer(async (baseUrl, store) => {
-    const admin = await loginAs(baseUrl, store, 'MC-AD-202613-0001', 'Admin@2026!');
+    const admin = await loginAs(baseUrl, store, 'MC2627110001', '8101352105');
 
     // Reject disallowed MIME and >10MB
     const badMime = await requestApi(
@@ -594,14 +594,14 @@ test('P3-8. Document Upload Validation (Type/10MB Size) & Maintenance Mode (503 
 
     const mgrCap = issueTestCaptcha(store);
     const mgrBlocked = await requestApi(baseUrl, 'POST', '/api/auth/login', {
-      userId: 'MC-MN-202613-0002',
+      userId: 'MC2627110002',
       password: 'Manager@2026!',
       captchaId: mgrCap.id,
       captchaAnswer: mgrCap.answer,
     });
     assert.equal(mgrBlocked.status, 503);
 
-    const admSession = await loginAs(baseUrl, store, 'MC-AD-202613-0001', 'Admin@2026!');
+    const admSession = await loginAs(baseUrl, store, 'MC2627110001', '8101352105');
     assert.equal(admSession.user.role, 'ADMIN');
   });
 });

@@ -205,7 +205,7 @@ export const QaDashboardPage: React.FC<QaDashboardPageProps> = ({
             type="text"
             value={testerFilter}
             onChange={(e) => setTesterFilter(e.target.value)}
-            placeholder="e.g. MC-AD-202613-0001"
+            placeholder="e.g. MC2627110001"
             className="w-full h-8 px-2 text-xs rounded border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-950 text-neutral-900 dark:text-neutral-100 font-mono"
           />
         </div>
